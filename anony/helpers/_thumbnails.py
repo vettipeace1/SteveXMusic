@@ -1,12 +1,10 @@
-# Copyright (c) 2025 AnonymousX1025
-# Licensed under the MIT License.
-# This file is part of AnonXMusic
-
+# FIXED PREMIUM THUMBNAIL CODE
 
 import os
 import aiohttp
-from PIL import (Image, ImageDraw, ImageEnhance,
-                 ImageFilter, ImageFont, ImageOps)
+import numpy as np
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from unidecode import unidecode
 
 from anony import config
 from anony.helpers import Track
@@ -16,17 +14,17 @@ class Thumbnail:
     def __init__(self):
         self.size = (1280, 720)
 
-        # Fonts (make sure these exist)
         self.font_title = ImageFont.truetype("anony/helpers/Raleway-Bold.ttf", 46)
         self.font_sub   = ImageFont.truetype("anony/helpers/Inter-Light.ttf", 28)
 
-        self.session: aiohttp.ClientSession | None = None
+        self.session = None
 
     async def start(self):
         self.session = aiohttp.ClientSession()
 
     async def close(self):
-        await self.session.close()
+        if self.session:
+            await self.session.close()
 
     async def save_thumb(self, path, url):
         async with self.session.get(url) as resp:
@@ -34,19 +32,18 @@ class Thumbnail:
                 f.write(await resp.read())
         return path
 
-    # 🎨 AUTO COLOR (Spotify-style)
+    # 🎨 dominant color
     def get_dominant_color(self, img):
         img = img.resize((100, 100))
         arr = np.array(img).reshape(-1, 3)
         avg = arr.mean(axis=0)
         return tuple(int(min(255, c * 1.2)) for c in avg)
 
-    # 🌈 NEON BORDER
+    # 🌈 neon border
     def neon_border(self, canvas, bbox, color):
         draw = ImageDraw.Draw(canvas)
         r, g, b = color
 
-        # Glow layers
         for i in range(12, 0, -1):
             alpha = int(20 + i * 12)
             draw.rounded_rectangle(
@@ -56,21 +53,20 @@ class Thumbnail:
                 width=2
             )
 
-        # Core white line
         draw.rounded_rectangle(
             bbox, radius=30,
             outline=(255, 255, 255, 120),
             width=2
         )
 
-    # 🔥 TOP BADGES (NOW PLAYING + BOT NAME)
+    # 🔥 badges
     def draw_top_badges(self, canvas, dominant, bot_name):
         draw = ImageDraw.Draw(canvas)
         r, g, b = dominant
 
         font = self.font_sub
 
-        # LEFT BADGE
+        # LEFT
         text1 = "NOW PLAYING"
         w1 = int(font.getlength(text1)) + 40
         h = 48
@@ -89,7 +85,7 @@ class Thumbnail:
         d1.text((20,10), text1, font=font, fill=(255,255,255))
         canvas.alpha_composite(badge1, (30, 30))
 
-        # RIGHT BADGE (BOT NAME)
+        # RIGHT
         text2 = bot_name
         w2 = int(font.getlength(text2)) + 40
 
@@ -107,6 +103,7 @@ class Thumbnail:
         d2.text((20,10), text2, font=font, fill=(255,255,255))
         canvas.alpha_composite(badge2, (1280 - w2 - 30, 30))
 
+    # 🚀 MAIN GENERATOR
     async def generate(self, song: Track):
         try:
             temp   = f"cache/temp_{song.id}.jpg"
@@ -120,54 +117,39 @@ class Thumbnail:
             base = Image.open(temp).convert("RGB")
             dominant = self.get_dominant_color(base)
 
-            # 🔥 BACKGROUND
-            bg = base.resize(self.size).filter(ImageFilter.GaussianBlur(30))
+            # background
+            bg = base.resize(self.size).filter(ImageFilter.GaussianBlur(30)).convert("RGBA")
 
-            # Ambient color glow
-            ambient = Image.new("RGBA", self.size, (*dominant, 80))
-            bg = Image.alpha_composite(bg.convert("RGBA"), ambient)
+            overlay = Image.new("RGBA", self.size, (*dominant, 80))
+            bg = Image.alpha_composite(bg, overlay)
 
-            # Dark overlay
             dark = Image.new("RGBA", self.size, (0,0,0,140))
             bg = Image.alpha_composite(bg, dark)
 
             canvas = bg.copy()
 
-            # 🎵 COVER
-            cover = base.resize((420, 320))
+            # cover
+            cover = base.resize((420, 320)).convert("RGBA")
+
             mask = Image.new("L", cover.size, 0)
-            ImageDraw.Draw(mask).rounded_rectangle(
-                (0,0,cover.size[0],cover.size[1]), radius=30, fill=255
-            )
+            ImageDraw.Draw(mask).rounded_rectangle((0,0,420,320), radius=30, fill=255)
             cover.putalpha(mask)
 
             cx = (1280 - 420)//2
             cy = 120
 
-            # Glow shadow
-            shadow = Image.new("RGBA", (440,340), (0,0,0,0))
-            ImageDraw.Draw(shadow).rounded_rectangle(
-                (10,10,430,330),
-                radius=35,
-                fill=(*dominant,120)
-            )
-            shadow = shadow.filter(ImageFilter.GaussianBlur(25))
-
-            canvas.alpha_composite(shadow, (cx-10, cy-10))
             canvas.alpha_composite(cover, (cx, cy))
 
-            # Neon border
             self.neon_border(canvas, (cx, cy, cx+420, cy+320), dominant)
 
             draw = ImageDraw.Draw(canvas)
 
-            # 🔥 BOT NAME AUTO
-            bot_name = unidecode(getattr(config, "BOT_NAME", "My Music"))[:18]
+            # bot name
+            bot_name = unidecode(getattr(config, "BOT_NAME", "STEVE MUSIC"))[:18]
 
-            # Top badges
             self.draw_top_badges(canvas, dominant, bot_name)
 
-            # 🎶 TEXT
+            # text
             draw.text((640, 470), song.title[:40],
                       anchor="mm", fill="white", font=self.font_title)
 
@@ -176,7 +158,7 @@ class Thumbnail:
                       anchor="mm", fill=(200,200,200),
                       font=self.font_sub)
 
-            # 🎧 PROGRESS BAR
+            # progress bar
             x0, x1 = 200, 1080
             y = 600
 
@@ -188,14 +170,8 @@ class Thumbnail:
                                    radius=10,
                                    fill=dominant)
 
-            # Glow dot
-            for i in range(6):
-                draw.ellipse((prog-10-i, y-5-i, prog+10+i, y+15+i),
-                             fill=(*dominant, 30))
-
             draw.ellipse((prog-8,y-5,prog+8,y+15), fill="white")
 
-            # Time
             draw.text((x0, y+20), "0:00", fill="white", font=self.font_sub)
             draw.text((x1-80, y+20), song.duration, fill="white", font=self.font_sub)
 
@@ -208,5 +184,6 @@ class Thumbnail:
 
             return output
 
-        except Exception:
+        except Exception as e:
+            print("Thumbnail Error:", e)  # 🔥 DEBUG FIX
             return config.DEFAULT_THUMB
