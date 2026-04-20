@@ -105,85 +105,124 @@ class Thumbnail:
 
     # 🚀 MAIN GENERATOR
     async def generate(self, song: Track):
-        try:
-            temp   = f"cache/temp_{song.id}.jpg"
-            output = f"cache/{song.id}.png"
+    try:
+        temp = f"cache/temp_{song.id}.jpg"
+        output = f"cache/{song.id}.png"
 
-            if os.path.exists(output):
-                return output
-
-            await self.save_thumb(temp, song.thumbnail)
-
-            base = Image.open(temp).convert("RGB")
-            dominant = self.get_dominant_color(base)
-
-            # background
-            bg = base.resize(self.size).filter(ImageFilter.GaussianBlur(30)).convert("RGBA")
-
-            overlay = Image.new("RGBA", self.size, (*dominant, 80))
-            bg = Image.alpha_composite(bg, overlay)
-
-            dark = Image.new("RGBA", self.size, (0,0,0,140))
-            bg = Image.alpha_composite(bg, dark)
-
-            canvas = bg.copy()
-
-            # cover
-            cover = base.resize((420, 320)).convert("RGBA")
-
-            mask = Image.new("L", cover.size, 0)
-            ImageDraw.Draw(mask).rounded_rectangle((0,0,420,320), radius=30, fill=255)
-            cover.putalpha(mask)
-
-            cx = (1280 - 420)//2
-            cy = 120
-
-            canvas.alpha_composite(cover, (cx, cy))
-
-            self.neon_border(canvas, (cx, cy, cx+420, cy+320), dominant)
-
-            draw = ImageDraw.Draw(canvas)
-
-            # bot name
-            bot_name = unidecode(getattr(config, "BOT_NAME", "STEVE MUSIC"))[:18]
-
-            self.draw_top_badges(canvas, dominant, bot_name)
-
-            # text
-            draw.text((640, 470), song.title[:40],
-                      anchor="mm", fill="white", font=self.font_title)
-
-            draw.text((640, 520),
-                      f"{song.channel_name[:30]}",
-                      anchor="mm", fill=(200,200,200),
-                      font=self.font_sub)
-
-            # progress bar
-            x0, x1 = 200, 1080
-            y = 600
-
-            draw.rounded_rectangle((x0,y,x1,y+10), radius=10, fill=(80,80,80))
-
-            prog = int(x0 + (x1-x0)*0.5)
-
-            draw.rounded_rectangle((x0,y,prog,y+10),
-                                   radius=10,
-                                   fill=dominant)
-
-            draw.ellipse((prog-8,y-5,prog+8,y+15), fill="white")
-
-            draw.text((x0, y+20), "0:00", fill="white", font=self.font_sub)
-            draw.text((x1-80, y+20), song.duration, fill="white", font=self.font_sub)
-
-            canvas.convert("RGB").save(output, quality=95)
-
-            try:
-                os.remove(temp)
-            except:
-                pass
-
+        if os.path.exists(output):
             return output
 
-        except Exception as e:
-            print("Thumbnail Error:", e)  # 🔥 DEBUG FIX
-            return config.DEFAULT_THUMB
+        await self.save_thumb(temp, song.thumbnail)
+
+        base = Image.open(temp).convert("RGB")
+        dominant = self.get_dominant_color(base)
+
+        # 🎯 BACKGROUND
+        bg = base.resize(self.size).filter(ImageFilter.GaussianBlur(35))
+        dark = Image.new("RGBA", self.size, (0, 0, 0, 180))
+        canvas = Image.alpha_composite(bg.convert("RGBA"), dark)
+
+        draw = ImageDraw.Draw(canvas)
+
+        # 🎵 CENTER COVER
+        cover = base.resize((420, 320))
+        mask = Image.new("L", cover.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            (0, 0, 420, 320), radius=25, fill=255
+        )
+        cover.putalpha(mask)
+
+        cx = (1280 - 420) // 2
+        cy = 120
+
+        # Glow shadow
+        glow = Image.new("RGBA", (460, 360), (0, 0, 0, 0))
+        ImageDraw.Draw(glow).rounded_rectangle(
+            (20, 20, 440, 340),
+            radius=30,
+            fill=(*dominant, 120)
+        )
+        glow = glow.filter(ImageFilter.GaussianBlur(25))
+
+        canvas.alpha_composite(glow, (cx - 20, cy - 20))
+        canvas.alpha_composite(cover, (cx, cy))
+
+        # 🔥 NEON BORDER
+        self.neon_border(canvas, (cx, cy, cx + 420, cy + 320), dominant)
+
+        # 🎯 TOP BADGES
+        bot_name = unidecode(getattr(config, "BOT_NAME", "『ꜱᴛᴇᴠᴇ'ꜱ ᴍᴜꜱɪᴄ ʙᴏᴛ 』"))[:18]
+        self.draw_top_badges(canvas, dominant, bot_name)
+
+        # =====================================
+        # 🔥 BOTTOM GLASS PANEL (MAIN FIX)
+        # =====================================
+        panel = Image.new("RGBA", (1280, 220), (0, 0, 0, 180))
+        canvas.alpha_composite(panel, (0, 500))
+
+        draw = ImageDraw.Draw(canvas)
+
+        # 🎵 SMALL THUMB (LEFT)
+        small = base.resize((90, 90))
+        mask2 = Image.new("L", small.size, 0)
+        ImageDraw.Draw(mask2).rounded_rectangle(
+            (0, 0, 90, 90), radius=15, fill=255
+        )
+        small.putalpha(mask2)
+        canvas.alpha_composite(small, (40, 540))
+
+        # 🎶 TEXTS
+        draw.text((150, 540),
+                  song.title[:40],
+                  fill="white",
+                  font=self.font_title)
+
+        draw.text((150, 590),
+                  f"Played by: {bot_name}  •  {song.channel_name[:20]}",
+                  fill=(200, 200, 200),
+                  font=self.font_sub)
+
+        # =====================================
+        # 🎧 PROGRESS BAR (GRADIENT STYLE)
+        # =====================================
+        x0, x1 = 150, 1150
+        y = 640
+
+        # background line
+        draw.rounded_rectangle((x0, y, x1, y + 8),
+                               radius=10,
+                               fill=(80, 80, 80))
+
+        # progress
+        prog = int(x0 + (x1 - x0) * 0.5)
+
+        # gradient effect
+        for i in range(x0, prog):
+            ratio = (i - x0) / (prog - x0 + 1)
+            r = int(dominant[0] * ratio + 100)
+            g = int(dominant[1] * ratio + 100)
+            b = int(dominant[2] * ratio + 100)
+            draw.line([(i, y), (i, y + 8)], fill=(r, g, b))
+
+        # knob
+        draw.ellipse((prog - 6, y - 4, prog + 6, y + 12),
+                     fill="white")
+
+        # time text
+        draw.text((x0, y + 15), "0:00", fill="white", font=self.font_sub)
+        draw.text((x1 - 80, y + 15), song.duration,
+                  fill="white", font=self.font_sub)
+
+        # SAVE
+        canvas.convert("RGB").save(output, quality=95)
+
+        try:
+            os.remove(temp)
+        except:
+            pass
+
+        return output
+
+    except Exception as e:
+        print("THUMB ERROR:", e)
+        return config.DEFAULT_THUMB
