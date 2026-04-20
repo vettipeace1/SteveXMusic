@@ -32,14 +32,14 @@ class Thumbnail:
                 f.write(await resp.read())
         return path
 
-    # 🎨 dominant color
+    # dominant color
     def get_dominant_color(self, img):
         img = img.resize((100, 100))
         arr = np.array(img).reshape(-1, 3)
         avg = arr.mean(axis=0)
         return tuple(int(min(255, c * 1.2)) for c in avg)
 
-    # 🌈 neon border
+    # neon border
     def neon_border(self, canvas, bbox, color):
         draw = ImageDraw.Draw(canvas)
         r, g, b = color
@@ -59,7 +59,7 @@ class Thumbnail:
             width=2
         )
 
-    # 🔥 badges
+    # badges
     def draw_top_badges(self, canvas, dominant, bot_name):
         draw = ImageDraw.Draw(canvas)
         r, g, b = dominant
@@ -103,7 +103,7 @@ class Thumbnail:
         d2.text((20,10), text2, font=font, fill=(255,255,255))
         canvas.alpha_composite(badge2, (1280 - w2 - 30, 30))
 
-    # 🚀 MAIN GENERATOR
+    # MAIN GENERATOR
     async def generate(self, song: Track):
     try:
         temp = f"cache/temp_{song.id}.jpg"
@@ -117,14 +117,14 @@ class Thumbnail:
         base = Image.open(temp).convert("RGB")
         dominant = self.get_dominant_color(base)
 
-        # 🎯 BACKGROUND
+        # BACKGROUND
         bg = base.resize(self.size).filter(ImageFilter.GaussianBlur(35))
         dark = Image.new("RGBA", self.size, (0, 0, 0, 180))
         canvas = Image.alpha_composite(bg.convert("RGBA"), dark)
 
         draw = ImageDraw.Draw(canvas)
 
-        # 🎵 CENTER COVER
+        # CENTER COVER
         cover = base.resize((420, 320))
         mask = Image.new("L", cover.size, 0)
         ImageDraw.Draw(mask).rounded_rectangle(
@@ -147,22 +147,22 @@ class Thumbnail:
         canvas.alpha_composite(glow, (cx - 20, cy - 20))
         canvas.alpha_composite(cover, (cx, cy))
 
-        # 🔥 NEON BORDER
+        # NEON BORDER
         self.neon_border(canvas, (cx, cy, cx + 420, cy + 320), dominant)
 
-        # 🎯 TOP BADGES
+        # TOP BADGES
         bot_name = unidecode(getattr(config, "BOT_NAME", "『ꜱᴛᴇᴠᴇ'ꜱ ᴍᴜꜱɪᴄ ʙᴏᴛ 』"))[:18]
         self.draw_top_badges(canvas, dominant, bot_name)
 
         # =====================================
-        # 🔥 BOTTOM GLASS PANEL (MAIN FIX)
+        # BOTTOM GLASS PANEL (MAIN FIX)
         # =====================================
         panel = Image.new("RGBA", (1280, 220), (0, 0, 0, 180))
         canvas.alpha_composite(panel, (0, 500))
 
         draw = ImageDraw.Draw(canvas)
 
-        # 🎵 SMALL THUMB (LEFT)
+        # SMALL THUMB (LEFT)
         small = base.resize((90, 90))
         mask2 = Image.new("L", small.size, 0)
         ImageDraw.Draw(mask2).rounded_rectangle(
@@ -171,7 +171,7 @@ class Thumbnail:
         small.putalpha(mask2)
         canvas.alpha_composite(small, (40, 540))
 
-        # 🎶 TEXTS
+        # TEXTS
         draw.text((150, 540),
                   song.title[:40],
                   fill="white",
@@ -183,7 +183,7 @@ class Thumbnail:
                   font=self.font_sub)
 
         # =====================================
-        # 🎧 PROGRESS BAR (GRADIENT STYLE)
+        # PROGRESS BAR (GRADIENT STYLE)
         # =====================================
         x0, x1 = 150, 1150
         y = 640
