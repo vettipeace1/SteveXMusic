@@ -1,7 +1,4 @@
 # Copyright (c) 2025 AnonymousX1025
-# Licensed under the MIT License.
-# This file is part of AnonXMusic
-
 
 import os
 import re
@@ -24,63 +21,57 @@ class YouTube:
         self.checked = False
         self.cookie_dir = "anony/cookies"
         self.warned = False
+
         self.regex = re.compile(
             r"(https?://)?(www\.|m\.|music\.)?"
             r"(youtube\.com/(watch\?v=|shorts/|playlist\?list=)|youtu\.be/)"
-            r"([A-Za-z0-9_-]{11}|PL[A-Za-z0-9_-]+)([&?][^\s]*)?"
+            r"([A-Za-z0-9_-]{11}|PL[A-Za-z0-9_-]+)"
         )
+
         self.iregex = re.compile(
             r"https?://(?:www\.|m\.|music\.)?(?:youtube\.com|youtu\.be)"
             r"(?!/(watch\?v=[A-Za-z0-9_-]{11}|shorts/[A-Za-z0-9_-]{11}"
-            r"|playlist\?list=PL[A-Za-z0-9_-]+|[A-Za-z0-9_-]{11}))\S*"
+            r"|playlist\?list=PL[A-Za-z0-9_-]+))"
         )
 
+    # ─────────────────────────────
+    # 🍪 COOKIES SYSTEM
+    # ─────────────────────────────
     def get_cookies(self):
         if not self.checked:
-            for file in os.listdir(self.cookie_dir):
-                if file.endswith(".txt"):
-                    self.cookies.append(f"{self.cookie_dir}/{file}")
+            if os.path.exists(self.cookie_dir):
+                for file in os.listdir(self.cookie_dir):
+                    if file.endswith(".txt"):
+                        self.cookies.append(f"{self.cookie_dir}/{file}")
             self.checked = True
+
         if not self.cookies:
             if not self.warned:
+                logger.warning("⚠️ No cookies found")
                 self.warned = True
-                logger.warning("Cookies are missing; downloads might fail.")
             return None
+
         return random.choice(self.cookies)
 
-    async def save_cookies(self, urls: list[str]) -> None:
-        logger.info("Saving cookies from urls...")
-        async with aiohttp.ClientSession() as session:
-            for url in urls:
-                name = url.split("/")[-1]
-                link = "https://batbin.me/raw/" + name
-                async with session.get(link) as resp:
-                    resp.raise_for_status()
-                    with open(f"{self.cookie_dir}/{name}.txt", "wb") as fw:
-                        fw.write(await resp.read())
-        logger.info(f"Cookies saved in {self.cookie_dir}.")
-
-    def valid(self, url: str) -> bool:
-        return bool(re.match(self.regex, url))
-
-    def invalid(self, url: str) -> bool:
-        return bool(re.match(self.iregex, url))
-
-    async def search(self, query: str, m_id: int, video: bool = False) -> Track | None:
+    # ─────────────────────────────
+    # 🔍 SEARCH
+    # ─────────────────────────────
+    async def search(self, query: str, m_id: int, video: bool = False):
         try:
-            _search = VideosSearch(query, limit=1, with_live=False)
-            results = await _search.next()
+            results = await VideosSearch(query, limit=1).next()
         except Exception:
             return None
+
         if results and results["result"]:
             data = results["result"][0]
+
             return Track(
                 id=data.get("id"),
                 channel_name=data.get("channel", {}).get("name"),
                 duration=data.get("duration"),
                 duration_sec=utils.to_seconds(data.get("duration")),
                 message_id=m_id,
-                title=data.get("title")[:25],
+                title=data.get("title")[:40],
                 thumbnail=data.get("thumbnails", [{}])[-1].get("url").split("?")[0],
                 url=data.get("link"),
                 view_count=data.get("viewCount", {}).get("short"),
@@ -88,82 +79,109 @@ class YouTube:
             )
         return None
 
-    async def playlist(self, limit: int, user: str, url: str, video: bool) -> list[Track | None]:
+    # ─────────────────────────────
+    # 📂 PLAYLIST
+    # ─────────────────────────────
+    async def playlist(self, limit: int, user: str, url: str, video: bool):
         tracks = []
         try:
             plist = await Playlist.get(url)
+
             for data in plist["videos"][:limit]:
-                track = Track(
-                    id=data.get("id"),
-                    channel_name=data.get("channel", {}).get("name", ""),
-                    duration=data.get("duration"),
-                    duration_sec=utils.to_seconds(data.get("duration")),
-                    title=data.get("title")[:25],
-                    thumbnail=data.get("thumbnails")[-1].get("url").split("?")[0],
-                    url=data.get("link").split("&list=")[0],
-                    user=user,
-                    view_count="",
-                    video=video,
+                tracks.append(
+                    Track(
+                        id=data.get("id"),
+                        channel_name=data.get("channel", {}).get("name", ""),
+                        duration=data.get("duration"),
+                        duration_sec=utils.to_seconds(data.get("duration")),
+                        title=data.get("title")[:40],
+                        thumbnail=data.get("thumbnails")[-1].get("url").split("?")[0],
+                        url=data.get("link").split("&list=")[0],
+                        user=user,
+                        view_count="",
+                        video=video,
+                    )
                 )
-                tracks.append(track)
         except Exception:
             pass
+
         return tracks
 
-    async def download(self, video_id: str, video: bool = False) -> str | None:
-    url = self.base + video_id
-    ext = "mp4" if video else "webm"
-    filename = f"downloads/{video_id}.{ext}"
+    # ─────────────────────────────
+    # ⚡ FAST STREAM (NO DOWNLOAD)
+    # ─────────────────────────────
+    async def stream(self, video_id: str):
+        url = self.base + video_id
 
-    if Path(filename).exists():
-        return filename
-
-    # 🔁 Retry system (3 attempts)
-    for attempt in range(3):
-        cookie = self.get_cookies()
-
-        base_opts = {
-            "outtmpl": "downloads/%(id)s.%(ext)s",
-            "quiet": True,
-            "noplaylist": True,
-            "geo_bypass": True,
-            "nocheckcertificate": True,
-            "cookiefile": cookie,
-            "http_headers": {
-                "User-Agent": "Mozilla/5.0"
-            },
-        }
-
-        # 🎥 VIDEO (flexible fallback)
-        if video:
-            ydl_opts = {
-                **base_opts,
-                "format": "bestvideo+bestaudio/best",  # ✅ FIXED
-                "merge_output_format": "mp4",
-            }
-
-        # 🎧 AUDIO (no restriction)
-        else:
-            ydl_opts = {
-                **base_opts,
-                "format": "bestaudio/best",  # ✅ FIXED
-            }
-
-        def _download():
+        def _extract():
             try:
+                ydl_opts = {
+                    "quiet": True,
+                    "format": "bestaudio/best",
+                    "cookiefile": self.get_cookies(),
+                }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
-                return filename
+                    info = ydl.extract_info(url, download=False)
+                    return info.get("url")
             except Exception as e:
-                logger.warning(f"Attempt {attempt+1} failed: {e}")
+                logger.error(f"Stream error: {e}")
                 return None
 
-        result = await asyncio.to_thread(_download)
+        return await asyncio.to_thread(_extract)
 
-        if result:
-            return result
+    # ─────────────────────────────
+    # 📥 DOWNLOAD (STABLE)
+    # ─────────────────────────────
+    async def download(self, video_id: str, video: bool = False):
+        url = self.base + video_id
+        ext = "mp4" if video else "webm"
+        filename = f"downloads/{video_id}.{ext}"
 
-        await asyncio.sleep(2)
+        if Path(filename).exists():
+            return filename
 
-    logger.error("❌ Download failed after retries")
-    return None
+        for attempt in range(3):
+            cookie = self.get_cookies()
+
+            base_opts = {
+                "outtmpl": "downloads/%(id)s.%(ext)s",
+                "quiet": True,
+                "noplaylist": True,
+                "geo_bypass": True,
+                "nocheckcertificate": True,
+                "cookiefile": cookie,
+                "http_headers": {"User-Agent": "Mozilla/5.0"},
+                "retries": 3,
+                "fragment_retries": 3,
+            }
+
+            if video:
+                ydl_opts = {
+                    **base_opts,
+                    "format": "bestvideo+bestaudio/best",
+                    "merge_output_format": "mp4",
+                }
+            else:
+                ydl_opts = {
+                    **base_opts,
+                    "format": "bestaudio/best",
+                }
+
+            def _download():
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([url])
+                    return filename
+                except Exception as e:
+                    logger.warning(f"Attempt {attempt+1} failed: {e}")
+                    return None
+
+            result = await asyncio.to_thread(_download)
+
+            if result:
+                return result
+
+            await asyncio.sleep(2)
+
+        logger.error("❌ Download failed after retries")
+        return None
