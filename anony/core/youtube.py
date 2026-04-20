@@ -111,46 +111,59 @@ class YouTube:
         return tracks
 
     async def download(self, video_id: str, video: bool = False) -> str | None:
-        url = self.base + video_id
-        ext = "mp4" if video else "webm"
-        filename = f"downloads/{video_id}.{ext}"
+    url = self.base + video_id
+    ext = "mp4" if video else "webm"
+    filename = f"downloads/{video_id}.{ext}"
 
-        if Path(filename).exists():
-            return filename
+    if Path(filename).exists():
+        return filename
 
+    # 🔁 Retry system (3 attempts)
+    for attempt in range(3):
         cookie = self.get_cookies()
+
         base_opts = {
             "outtmpl": "downloads/%(id)s.%(ext)s",
             "quiet": True,
             "noplaylist": True,
             "geo_bypass": True,
-            "no_warnings": True,
-            "overwrites": False,
             "nocheckcertificate": True,
             "cookiefile": cookie,
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0"
+            },
         }
 
+        # 🎥 VIDEO (flexible fallback)
         if video:
             ydl_opts = {
                 **base_opts,
-                "format": "(bestvideo[height<=?720][width<=?1280][ext=mp4])+(bestaudio)",
+                "format": "bestvideo+bestaudio/best",  # ✅ FIXED
                 "merge_output_format": "mp4",
             }
+
+        # 🎧 AUDIO (no restriction)
         else:
             ydl_opts = {
                 **base_opts,
-                "format": "bestaudio[ext=webm][acodec=opus]",
+                "format": "bestaudio/best",  # ✅ FIXED
             }
 
         def _download():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                try:
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
-                except (yt_dlp.utils.DownloadError, yt_dlp.utils.ExtractorError):
-                    return None
-                except Exception as ex:
-                    logger.warning("Download failed: %s", ex)
-                    return None
-            return filename
+                return filename
+            except Exception as e:
+                logger.warning(f"Attempt {attempt+1} failed: {e}")
+                return None
 
-        return await asyncio.to_thread(_download)
+        result = await asyncio.to_thread(_download)
+
+        if result:
+            return result
+
+        await asyncio.sleep(2)
+
+    logger.error("❌ Download failed after retries")
+    return None
