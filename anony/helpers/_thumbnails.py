@@ -1,11 +1,12 @@
 # Copyright (c) 2025 AnonymousX1025
-# Upgraded Premium Thumbnail Generator
+# Licensed under the MIT License.
+# This file is part of AnonXMusic
+
 
 import os
 import aiohttp
-import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
-from unidecode import unidecode
+from PIL import (Image, ImageDraw, ImageEnhance,
+                 ImageFilter, ImageFont, ImageOps)
 
 from anony import config
 from anony.helpers import Track
