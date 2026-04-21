@@ -85,15 +85,13 @@ async def start(_, message: types.Message):
 
 
 # ─── HELP BUTTON CLICK (FIXED) ───
-@app.on_callback_query(filters.regex("^help"))
+@app.on_callback_query(filters.regex("^help$"))
 @lang.language()
-async def help_cb(_, query):
+async def help_cb(_, query: types.CallbackQuery):
+    _lang = query.lang  # ✅ FIXED (no underscore)
 
-    _lang = query._lang  # ✅ FIX
-
-    await query.message.edit_caption(
-        caption=_lang["help_menu"],
-        reply_markup=buttons.help_markup(_lang),
+    await query.message.edit_reply_markup(
+        reply_markup=buttons.help_markup(_lang)
     )
 
 
