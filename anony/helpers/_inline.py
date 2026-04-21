@@ -12,16 +12,16 @@
 #  Bot API 9.4 button style values:
 #    style="primary"     →  🔵 BLUE
 #    style="success"     →  🟢 GREEN
-#    style="destructive" →  🔴 RED
+#    style="danger" →  🔴 RED
 #    (no style)          →  default (desaturated navy blue)
 #
 #  Colour rules:
 #   1) Add me to your group  → 🟢 GREEN   (style="success")
 #   2) Help                  → 🔵 BLUE    (style="primary")
-#   3) Source                → 🔴 RED     (style="destructive")
+#   3) Source                → 🔴 RED     (style="danger")
 #   4) All Back buttons      → 🟢 GREEN   (style="success")
-#   5) All Close buttons     → 🔴 RED     (style="destructive")
-#   6) Timer during playing  → 🔴 RED     (style="destructive")
+#   5) All Close buttons     → 🔴 RED     (style="danger")
+#   6) Timer during playing  → 🔴 RED     (style="danger")
 # ══════════════════════════════════════════════════════════════════════════════
 
 from pyrogram import types
@@ -68,7 +68,7 @@ class Inline:
         elif timer:
             # Rule 6: Timer → 🔴 RED
             keyboard.append(
-                [_ikb(timer, style="destructive", callback_data=f"controls status {chat_id}")]
+                [_ikb(timer, style="danger", callback_data=f"controls status {chat_id}")]
             )
 
         if not remove:
@@ -90,7 +90,7 @@ class Inline:
             rows = [
                 [
                     _ikb(_lang["back"],  style="success",     callback_data="help back"),   # Rule 4: 🟢
-                    _ikb(_lang["close"], style="destructive", callback_data="help close"),  # Rule 5: 🔴
+                    _ikb(_lang["close"], style="danger", callback_data="help close"),  # Rule 5: 🔴
                 ]
             ]
         else:
@@ -176,7 +176,7 @@ class Inline:
             # Rule 3: Source → 🔴 RED
             rows += [
                 [_ikb(lang["source"],
-                      style="destructive",
+                      style="danger",
                       url="https://t.me/vettipeace")]
             ]
         else:
