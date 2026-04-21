@@ -3,223 +3,254 @@
 # This file is part of AnonXMusic
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Bot API 9.4 button style values:
+#  Pyrogram does NOT support the Bot API 9.4 `style` field natively yet.
+#  We use Pyrogram's raw TL layer directly via:
 #
-#   style="positive"      →  🟢 GREEN
-#   style="primary"       →  🔵 BLUE
-#   style="destructive"   →  🔴 RED
-#   (no style param)      →  default (desaturated navy blue)
+#    from pyrogram.raw.types import (
+#        KeyboardButtonCallback,
+#        KeyboardButtonUrl,
+#        KeyboardButtonColor,         ← wraps any button with a colour
+#        ReplyInlineMarkup,
+#        KeyboardButtonRow,
+#    )
 #
-#  Colour rules applied:
-#   1) Add me to your group  → GREEN      (style="positive")
-#   2) Help                  → BLUE       (style="primary")
-#   3) Source                → RED        (style="destructive")
-#   4) All Back buttons      → GREEN      (style="positive")
-#   5) All Close buttons     → RED        (style="destructive")
-#   6) Timer during playing  → RED        (style="destructive")
+#  KeyboardButtonColor flags:
+#    .green       = True  →  🟢 GREEN
+#    .blue        = True  →  🔵 BLUE  (actually "primary")
+#    .red         = True  →  🔴 RED
+#    (all False)          →  default (desaturated navy)
+#
+#  IMPORTANT: When using raw buttons you must send the message with
+#  reply_markup passed as a raw ReplyInlineMarkup object, NOT as
+#  types.InlineKeyboardMarkup. The helper send_raw_msg() below shows how.
+#
+#  For places that already use app.send_message / message.reply_text etc,
+#  replace reply_markup=... with the raw ReplyInlineMarkup returned here.
 # ══════════════════════════════════════════════════════════════════════════════
 
 from pyrogram import types
+from pyrogram.raw import types as raw_types
 
 from anony import app, config, lang
 from anony.core.lang import lang_codes
 
 
+# ── Colour helper ─────────────────────────────────────────────────────────────
+
+def _color(button, *, green=False, blue=False, red=False):
+    """Wrap a raw button with KeyboardButtonColor to apply a colour."""
+    return raw_types.KeyboardButtonColor(
+        button=button,
+        green=green,
+        blue=blue,
+        red=red,
+    )
+
+def _row(*buttons):
+    return raw_types.KeyboardButtonRow(buttons=list(buttons))
+
+def _markup(*rows):
+    return raw_types.ReplyInlineMarkup(rows=list(rows))
+
+def _cb(text, data: str):
+    """Callback button."""
+    return raw_types.KeyboardButtonCallback(
+        text=text,
+        data=data.encode(),
+    )
+
+def _url(text, url: str):
+    """URL button."""
+    return raw_types.KeyboardButtonUrl(text=text, url=url)
+
+def _copy(text, copy_text: str):
+    """Copy-text button."""
+    return raw_types.KeyboardButtonCopy(text=text, copy_text=copy_text)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  COLOUR RULES:
+#   1) Add me to your group  → 🟢 GREEN
+#   2) Help                  → 🔵 BLUE
+#   3) Source                → 🔴 RED
+#   4) All Back buttons      → 🟢 GREEN
+#   5) All Close buttons     → 🔴 RED
+#   6) Timer during playing  → 🔴 RED
+#   Everything else          → default (no colour wrapper)
+# ══════════════════════════════════════════════════════════════════════════════
+
 class Inline:
     def __init__(self):
+        # Keep these for parts of the code that still use normal Pyrogram types
         self.ikm = types.InlineKeyboardMarkup
         self.ikb = types.InlineKeyboardButton
 
-    def cancel_dl(self, text) -> types.InlineKeyboardMarkup:
-        return self.ikm([[self.ikb(text=text, callback_data="cancel_dl")]])
+    # ── cancel download (no colour needed) ───────────────────────────────────
+    def cancel_dl(self, text):
+        return _markup(
+            _row(_cb(text, "cancel_dl"))
+        )
 
+    # ── playback controls ─────────────────────────────────────────────────────
     def controls(
         self,
         chat_id: int,
         status: str = None,
         timer: str = None,
         remove: bool = False,
-    ) -> types.InlineKeyboardMarkup:
-        keyboard = []
+    ):
+        rows = []
 
         if status:
             # Normal status → default colour
-            keyboard.append(
-                [self.ikb(text=status, callback_data=f"controls status {chat_id}")]
-            )
+            rows.append(_row(_cb(status, f"controls status {chat_id}")))
         elif timer:
             # Rule 6: Timer → RED
-            keyboard.append(
-                [
-                    self.ikb(
-                        text=timer,
-                        callback_data=f"controls status {chat_id}",
-                        style="destructive",
+            rows.append(
+                _row(
+                    _color(
+                        _cb(timer, f"controls status {chat_id}"),
+                        red=True,
                     )
-                ]
+                )
             )
 
         if not remove:
-            keyboard.append(
-                [
-                    self.ikb(text="▷",   callback_data=f"controls resume {chat_id}"),
-                    self.ikb(text="II",  callback_data=f"controls pause {chat_id}"),
-                    self.ikb(text="⥁",   callback_data=f"controls replay {chat_id}"),
-                    self.ikb(text="‣‣I", callback_data=f"controls skip {chat_id}"),
-                    self.ikb(text="▢",   callback_data=f"controls stop {chat_id}"),
-                ]
+            rows.append(
+                _row(
+                    _cb("▷",   f"controls resume {chat_id}"),
+                    _cb("II",  f"controls pause {chat_id}"),
+                    _cb("⥁",   f"controls replay {chat_id}"),
+                    _cb("‣‣I", f"controls skip {chat_id}"),
+                    _cb("▢",   f"controls stop {chat_id}"),
+                )
             )
-        return self.ikm(keyboard)
 
-    def help_markup(
-        self, _lang: dict, back: bool = False
-    ) -> types.InlineKeyboardMarkup:
+        return _markup(*rows)
+
+    # ── help menu ─────────────────────────────────────────────────────────────
+    def help_markup(self, _lang: dict, back: bool = False):
         if back:
-            rows = [
-                [
+            return _markup(
+                _row(
                     # Rule 4: Back → GREEN
-                    self.ikb(
-                        text=_lang["back"],
-                        callback_data="help back",
-                        style="positive",
-                    ),
+                    _color(_cb(_lang["back"],  "help back"),  green=True),
                     # Rule 5: Close → RED
-                    self.ikb(
-                        text=_lang["close"],
-                        callback_data="help close",
-                        style="destructive",
-                    ),
-                ]
-            ]
+                    _color(_cb(_lang["close"], "help close"), red=True),
+                )
+            )
         else:
             cbs = ["admins", "auth", "blist", "lang", "ping", "play", "queue", "stats", "sudo"]
-            buttons = [
-                self.ikb(text=_lang[f"help_{i}"], callback_data=f"help {cb}")
+            btns = [
+                _cb(_lang[f"help_{i}"], f"help {cb}")
                 for i, cb in enumerate(cbs)
             ]
-            rows = [buttons[i : i + 3] for i in range(0, len(buttons), 3)]
+            rows = [
+                _row(*btns[i : i + 3])
+                for i in range(0, len(btns), 3)
+            ]
+            return _markup(*rows)
 
-        return self.ikm(rows)
-
-    def lang_markup(self, _lang: str) -> types.InlineKeyboardMarkup:
+    # ── language picker ───────────────────────────────────────────────────────
+    def lang_markup(self, _lang: str):
         langs = lang.get_languages()
-
-        buttons = [
-            self.ikb(
-                text=f"{name} ({code}) {'✔️' if code == _lang else ''}",
-                callback_data=f"lang_change {code}",
+        btns = [
+            _cb(
+                f"{name} ({code}) {'✔️' if code == _lang else ''}",
+                f"lang_change {code}",
             )
             for code, name in langs.items()
         ]
-        rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-        return self.ikm(rows)
+        rows = [_row(*btns[i : i + 2]) for i in range(0, len(btns), 2)]
+        return _markup(*rows)
 
-    def ping_markup(self, text: str) -> types.InlineKeyboardMarkup:
-        return self.ikm([[self.ikb(text=text, url=config.SUPPORT_CHAT)]])
+    # ── ping button ───────────────────────────────────────────────────────────
+    def ping_markup(self, text: str):
+        return _markup(_row(_url(text, config.SUPPORT_CHAT)))
 
-    def play_queued(
-        self, chat_id: int, item_id: str, _text: str
-    ) -> types.InlineKeyboardMarkup:
-        return self.ikm(
-            [
-                [
-                    self.ikb(
-                        text=_text,
-                        callback_data=f"controls force {chat_id} {item_id}",
-                    )
-                ]
-            ]
+    # ── play now button ───────────────────────────────────────────────────────
+    def play_queued(self, chat_id: int, item_id: str, _text: str):
+        return _markup(
+            _row(_cb(_text, f"controls force {chat_id} {item_id}"))
         )
 
-    def queue_markup(
-        self, chat_id: int, _text: str, playing: bool
-    ) -> types.InlineKeyboardMarkup:
+    # ── queue pause/resume button ─────────────────────────────────────────────
+    def queue_markup(self, chat_id: int, _text: str, playing: bool):
         _action = "pause" if playing else "resume"
-        return self.ikm(
-            [[self.ikb(text=_text, callback_data=f"controls {_action} {chat_id} q")]]
+        return _markup(
+            _row(_cb(_text, f"controls {_action} {chat_id} q"))
         )
 
+    # ── settings ──────────────────────────────────────────────────────────────
     def settings_markup(
         self, lang: dict, admin_only: bool, cmd_delete: bool, language: str, chat_id: int
-    ) -> types.InlineKeyboardMarkup:
-        return self.ikm(
-            [
-                [
-                    self.ikb(text=lang["play_mode"] + " ➜", callback_data="settings"),
-                    self.ikb(text=admin_only, callback_data="settings play"),
-                ],
-                [
-                    self.ikb(text=lang["cmd_delete"] + " ➜", callback_data="settings"),
-                    self.ikb(text=cmd_delete, callback_data="settings delete"),
-                ],
-                [
-                    self.ikb(text=lang["language"] + " ➜", callback_data="settings"),
-                    self.ikb(text=lang_codes[language], callback_data="language"),
-                ],
-            ]
+    ):
+        return _markup(
+            _row(
+                _cb(lang["play_mode"] + " ➜", "settings"),
+                _cb(admin_only, "settings play"),
+            ),
+            _row(
+                _cb(lang["cmd_delete"] + " ➜", "settings"),
+                _cb(cmd_delete, "settings delete"),
+            ),
+            _row(
+                _cb(lang["language"] + " ➜", "settings"),
+                _cb(lang_codes[language], "language"),
+            ),
         )
 
-    def start_key(
-        self, lang: dict, private: bool = False
-    ) -> types.InlineKeyboardMarkup:
+    # ── /start private ────────────────────────────────────────────────────────
+    def start_key(self, lang: dict, private: bool = False):
         rows = [
             # Rule 1: Add me → GREEN
-            [
-                self.ikb(
-                    text=lang["add_me"],
-                    url=f"https://t.me/{app.username}?startgroup=true",
-                    style="positive",
+            _row(
+                _color(
+                    _url(lang["add_me"], f"https://t.me/{app.username}?startgroup=true"),
+                    green=True,
                 )
-            ],
+            ),
             # Rule 2: Help → BLUE
-            [
-                self.ikb(
-                    text=lang["help"],
-                    callback_data="help",
-                    style="primary",
-                )
-            ],
-            # Support + Channel → default colour
-            [
-                self.ikb(text=lang["support"], url=config.SUPPORT_CHAT),
-                self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL),
-            ],
+            _row(
+                _color(_cb(lang["help"], "help"), blue=True)
+            ),
+            # Support + Channel → default
+            _row(
+                _url(lang["support"], config.SUPPORT_CHAT),
+                _url(lang["channel"], config.SUPPORT_CHANNEL),
+            ),
         ]
 
         if private:
             # Rule 3: Source → RED
-            rows += [
-                [
-                    self.ikb(
-                        text=lang["source"],
-                        url="https://t.me/vettipeace",
-                        style="destructive",
+            rows.append(
+                _row(
+                    _color(
+                        _url(lang["source"], "https://t.me/vettipeace"),
+                        red=True,
                     )
-                ]
-            ]
+                )
+            )
         else:
-            # Language → default colour
-            rows += [[self.ikb(text=lang["language"], callback_data="language")]]
+            # Language → default
+            rows.append(_row(_cb(lang["language"], "language")))
 
-        return self.ikm(rows)
+        return _markup(*rows)
 
-    # Group /start: Help (BLUE) + Language (default)
-    def start_key_group(self, lang: dict) -> types.InlineKeyboardMarkup:
-        return self.ikm(
-            [
-                # Rule 2: Help → BLUE
-                [self.ikb(text=lang["help"], callback_data="help", style="primary")],
-                # Language → default colour
-                [self.ikb(text=lang["language"], callback_data="language")],
-            ]
+    # ── /start group (Help BLUE + Language default) ───────────────────────────
+    def start_key_group(self, lang: dict):
+        return _markup(
+            # Rule 2: Help → BLUE
+            _row(_color(_cb(lang["help"], "help"), blue=True)),
+            # Language → default
+            _row(_cb(lang["language"], "language")),
         )
 
-    def yt_key(self, link: str) -> types.InlineKeyboardMarkup:
-        return self.ikm(
-            [
-                [
-                    self.ikb(text="❐", copy_text=link),
-                    self.ikb(text="Youtube", url=link),
-                ],
-            ]
+    # ── YouTube link button ───────────────────────────────────────────────────
+    def yt_key(self, link: str):
+        return _markup(
+            _row(
+                _copy("❐", link),
+                _url("Youtube", link),
+            )
         )
