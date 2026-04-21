@@ -2,6 +2,22 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  Bot API 9.4 button style values:
+#
+#   style="positive"      →  🟢 GREEN
+#   style="primary"       →  🔵 BLUE
+#   style="destructive"   →  🔴 RED
+#   (no style param)      →  default (desaturated navy blue)
+#
+#  Colour rules applied:
+#   1) Add me to your group  → GREEN      (style="positive")
+#   2) Help                  → BLUE       (style="primary")
+#   3) Source                → RED        (style="destructive")
+#   4) All Back buttons      → GREEN      (style="positive")
+#   5) All Close buttons     → RED        (style="destructive")
+#   6) Timer during playing  → RED        (style="destructive")
+# ══════════════════════════════════════════════════════════════════════════════
 
 from pyrogram import types
 
@@ -15,7 +31,7 @@ class Inline:
         self.ikb = types.InlineKeyboardButton
 
     def cancel_dl(self, text) -> types.InlineKeyboardMarkup:
-        return self.ikm([[self.ikb(text=text, callback_data=f"cancel_dl")]])
+        return self.ikm([[self.ikb(text=text, callback_data="cancel_dl")]])
 
     def controls(
         self,
@@ -25,23 +41,32 @@ class Inline:
         remove: bool = False,
     ) -> types.InlineKeyboardMarkup:
         keyboard = []
+
         if status:
+            # Normal status → default colour
             keyboard.append(
                 [self.ikb(text=status, callback_data=f"controls status {chat_id}")]
             )
         elif timer:
+            # Rule 6: Timer → RED
             keyboard.append(
-                [self.ikb(text=timer, callback_data=f"controls status {chat_id}")]
+                [
+                    self.ikb(
+                        text=timer,
+                        callback_data=f"controls status {chat_id}",
+                        style="destructive",
+                    )
+                ]
             )
 
         if not remove:
             keyboard.append(
                 [
-                    self.ikb(text="▷", callback_data=f"controls resume {chat_id}"),
-                    self.ikb(text="II", callback_data=f"controls pause {chat_id}"),
-                    self.ikb(text="⥁", callback_data=f"controls replay {chat_id}"),
+                    self.ikb(text="▷",   callback_data=f"controls resume {chat_id}"),
+                    self.ikb(text="II",  callback_data=f"controls pause {chat_id}"),
+                    self.ikb(text="⥁",   callback_data=f"controls replay {chat_id}"),
                     self.ikb(text="‣‣I", callback_data=f"controls skip {chat_id}"),
-                    self.ikb(text="▢", callback_data=f"controls stop {chat_id}"),
+                    self.ikb(text="▢",   callback_data=f"controls stop {chat_id}"),
                 ]
             )
         return self.ikm(keyboard)
@@ -52,8 +77,18 @@ class Inline:
         if back:
             rows = [
                 [
-                    self.ikb(text=_lang["back"], callback_data="help back"),
-                    self.ikb(text=_lang["close"], callback_data="help close"),
+                    # Rule 4: Back → GREEN
+                    self.ikb(
+                        text=_lang["back"],
+                        callback_data="help back",
+                        style="positive",
+                    ),
+                    # Rule 5: Close → RED
+                    self.ikb(
+                        text=_lang["close"],
+                        callback_data="help close",
+                        style="destructive",
+                    ),
                 ]
             ]
         else:
@@ -89,7 +124,8 @@ class Inline:
             [
                 [
                     self.ikb(
-                        text=_text, callback_data=f"controls force {chat_id} {item_id}"
+                        text=_text,
+                        callback_data=f"controls force {chat_id} {item_id}",
                     )
                 ]
             ]
@@ -109,24 +145,15 @@ class Inline:
         return self.ikm(
             [
                 [
-                    self.ikb(
-                        text=lang["play_mode"] + " ➜",
-                        callback_data="settings",
-                    ),
+                    self.ikb(text=lang["play_mode"] + " ➜", callback_data="settings"),
                     self.ikb(text=admin_only, callback_data="settings play"),
                 ],
                 [
-                    self.ikb(
-                        text=lang["cmd_delete"] + " ➜",
-                        callback_data="settings",
-                    ),
+                    self.ikb(text=lang["cmd_delete"] + " ➜", callback_data="settings"),
                     self.ikb(text=cmd_delete, callback_data="settings delete"),
                 ],
                 [
-                    self.ikb(
-                        text=lang["language"] + " ➜",
-                        callback_data="settings",
-                    ),
+                    self.ikb(text=lang["language"] + " ➜", callback_data="settings"),
                     self.ikb(text=lang_codes[language], callback_data="language"),
                 ],
             ]
@@ -136,30 +163,56 @@ class Inline:
         self, lang: dict, private: bool = False
     ) -> types.InlineKeyboardMarkup:
         rows = [
+            # Rule 1: Add me → GREEN
             [
                 self.ikb(
                     text=lang["add_me"],
                     url=f"https://t.me/{app.username}?startgroup=true",
+                    style="positive",
                 )
             ],
-            [self.ikb(text=lang["help"], callback_data="help")],
+            # Rule 2: Help → BLUE
+            [
+                self.ikb(
+                    text=lang["help"],
+                    callback_data="help",
+                    style="primary",
+                )
+            ],
+            # Support + Channel → default colour
             [
                 self.ikb(text=lang["support"], url=config.SUPPORT_CHAT),
                 self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL),
             ],
         ]
+
         if private:
+            # Rule 3: Source → RED
             rows += [
                 [
                     self.ikb(
                         text=lang["source"],
                         url="https://t.me/vettipeace",
+                        style="destructive",
                     )
                 ]
             ]
         else:
+            # Language → default colour
             rows += [[self.ikb(text=lang["language"], callback_data="language")]]
+
         return self.ikm(rows)
+
+    # Group /start: Help (BLUE) + Language (default)
+    def start_key_group(self, lang: dict) -> types.InlineKeyboardMarkup:
+        return self.ikm(
+            [
+                # Rule 2: Help → BLUE
+                [self.ikb(text=lang["help"], callback_data="help", style="primary")],
+                # Language → default colour
+                [self.ikb(text=lang["language"], callback_data="language")],
+            ]
+        )
 
     def yt_key(self, link: str) -> types.InlineKeyboardMarkup:
         return self.ikm(
