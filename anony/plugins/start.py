@@ -35,7 +35,7 @@ async def start(_, message: types.Message):
         return await _help(_, message)
 
     if private:
-        # ── PM START (NO CHANGE) ──
+        # ── PM START ──
         _text = message.lang["start_pm"].format(
             message.from_user.first_name, app.name
         )
@@ -51,26 +51,26 @@ async def start(_, message: types.Message):
             await db.add_user(message.from_user.id)
 
     else:
-        # ── GROUP START (CUSTOM BUTTONS) ──
+        # ── GROUP START ──
         _text = message.lang["start_gp"].format(app.name)
 
-        # 🔥 CUSTOM GROUP BUTTONS (NO HELP)
+        # 🔥 Custom Group Buttons (Language top, Channel down)
         key = buttons.ikm(
-    [
-        [
-            buttons.ikb(
-                text=message.lang["language"],
-                callback_data="language",
-            )
-        ],
-        [
-            buttons.ikb(
-                text=message.lang["channel"],
-                url=config.SUPPORT_CHANNEL,
-            )
-        ],
-    ]
-)
+            [
+                [
+                    buttons.ikb(
+                        text=message.lang["language"],
+                        callback_data="language",
+                    )
+                ],
+                [
+                    buttons.ikb(
+                        text=message.lang["channel"],
+                        url=config.SUPPORT_CHANNEL,
+                    )
+                ],
+            ]
+        )
 
         await message.reply_video(
             video=config.START_VDO,
@@ -84,17 +84,73 @@ async def start(_, message: types.Message):
             await db.add_chat(message.chat.id)
 
 
-# ─── HELP CALLBACK (WORKING) ───
+# ─── HELP BUTTON ───
 @app.on_callback_query(filters.regex("^help"))
 @lang.language()
 async def help_cb(_, query):
-
-    _lang = query._lang   # ✅ correct way
+    _lang = query._lang
 
     await query.message.edit_caption(
         caption=_lang["help_menu"],
         reply_markup=buttons.help_markup(_lang),
     )
+
+
+# ─── LANGUAGE BUTTON CLICK ───
+@app.on_callback_query(filters.regex("^language$"))
+@lang.language()
+async def language_cb(_, query):
+    _lang = query._lang
+
+    await query.message.edit_caption(
+        caption=_lang["choose_lang"],
+        reply_markup=buttons.lang_markup(_lang["code"]),
+    )
+
+
+# ─── LANGUAGE BACK ───
+@app.on_callback_query(filters.regex("lang_back"))
+@lang.language()
+async def lang_back(_, query):
+    _lang = query._lang
+
+    # Detect PM or Group
+    if query.message.chat.type == enums.ChatType.PRIVATE:
+        await query.message.edit_caption(
+            caption=_lang["start_pm"].format(
+                query.from_user.first_name, app.name
+            ),
+            reply_markup=buttons.start_key(_lang, private=True),
+        )
+    else:
+        key = buttons.ikm(
+            [
+                [
+                    buttons.ikb(
+                        text=_lang["language"],
+                        callback_data="language",
+                    )
+                ],
+                [
+                    buttons.ikb(
+                        text=_lang["channel"],
+                        url=config.SUPPORT_CHANNEL,
+                    )
+                ],
+            ]
+        )
+
+        await query.message.edit_caption(
+            caption=_lang["start_gp"].format(app.name),
+            reply_markup=key,
+        )
+
+
+# ─── LANGUAGE CLOSE ───
+@app.on_callback_query(filters.regex("lang_close"))
+async def lang_close(_, query):
+    await query.message.delete()
+
 
 # ─── SETTINGS ───
 @app.on_message(filters.command(["playmode", "settings"]) & filters.group & ~app.bl_users)
