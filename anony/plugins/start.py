@@ -56,19 +56,21 @@ async def start(_, message: types.Message):
 
         # 🔥 CUSTOM GROUP BUTTONS (NO HELP)
         key = buttons.ikm(
-            [
-                [
-                    buttons.ikb(
-                        text=message.lang["language"],
-                        callback_data="language",
-                    ),
-                    buttons.ikb(
-                        text=message.lang["channel"],
-                        url=config.SUPPORT_CHANNEL,
-                    ),
-                ]
-            ]
-        )
+    [
+        [
+            buttons.ikb(
+                text=message.lang["language"],
+                callback_data="language",
+            )
+        ],
+        [
+            buttons.ikb(
+                text=message.lang["channel"],
+                url=config.SUPPORT_CHANNEL,
+            )
+        ],
+    ]
+)
 
         await message.reply_video(
             video=config.START_VDO,
@@ -86,11 +88,13 @@ async def start(_, message: types.Message):
 @app.on_callback_query(filters.regex("^help"))
 @lang.language()
 async def help_cb(_, query):
-    await query.message.edit_caption(
-        caption=query.message.lang["help_menu"],
-        reply_markup=buttons.help_markup(query.message.lang),
-    )
 
+    _lang = query._lang   # ✅ correct way
+
+    await query.message.edit_caption(
+        caption=_lang["help_menu"],
+        reply_markup=buttons.help_markup(_lang),
+    )
 
 # ─── SETTINGS ───
 @app.on_message(filters.command(["playmode", "settings"]) & filters.group & ~app.bl_users)
