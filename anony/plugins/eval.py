@@ -16,6 +16,11 @@ from pyrogram import filters, types
 
 from anony import anon, app, config, db, lang, userbot
 from anony.helpers import format_exception, meval
+from pyrogram import __version__ as pyro_ver
+from pyrogram.raw.all import layer
+
+print(f"Pyrogram: {pyro_ver}")
+print(f"TL Layer: {layer}")
 
 
 @app.on_message(filters.command(["eval", "exec"]) & filters.user(app.owner))
