@@ -12,12 +12,12 @@ from anony.helpers import buttons, utils
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
 async def _help(_, m: types.Message):
-    await m.reply_text(
-        text=m.lang["help_menu"],
-        reply_markup=buttons.help_markup(m.lang),
-        quote=True,
+    await message.reply_video(
+        video=config.START_VDO,
+        caption=m.lang["help_menu"],
+        reply_markup=button.help_markup(m.lang,
+        quote=not private,
     )
-
 
 @app.on_message(filters.command(["start"]))
 @lang.language()
@@ -29,26 +29,33 @@ async def start(_, message: types.Message):
         return await _help(_, message)
 
     private = message.chat.type == enums.ChatType.PRIVATE
-    _text = (
-        message.lang["start_pm"].format(message.from_user.first_name, app.name)
-        if private
-        else message.lang["start_gp"].format(app.name)
-    )
-
-    key = buttons.start_key(message.lang, private)
-    await message.reply_video(
-        video=config.START_VDO,
-        caption=_text,
-        reply_markup=key,
-        quote=not private,
-    )
 
     if private:
+        # ── PM: video + full buttons (Add to group, Help, Support, Channel, Source)
+        _text = message.lang["start_pm"].format(
+            message.from_user.first_name, app.name
+        )
+        key = buttons.start_key(message.lang, private=True)
+        await message.reply_video(
+            video=config.START_VDO,
+            caption=_text,
+            reply_markup=key,
+        )
         if await db.is_user(message.from_user.id):
-            return
+            returns
         await utils.send_log(message)
         await db.add_user(message.from_user.id)
+
     else:
+        # ── GROUP: video + Help and Language buttons only
+        _text = message.lang["start_gp"].format(app.name)
+        key = buttons.start_key_group(message.lang)
+        await message.reply_video(
+            video=config.START_VDO,
+            caption=_text,
+            reply_markup=key,
+            quote=True,
+        )
         if await db.is_chat(message.chat.id):
             return
         await utils.send_log(message, True)
