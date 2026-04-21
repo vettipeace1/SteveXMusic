@@ -2,14 +2,15 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
-
 import json
 from functools import wraps
 from pathlib import Path
 
 from pyrogram import errors
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from anony import db, logger
+
 
 lang_codes = {
     "ar": "العربية",
@@ -41,9 +42,11 @@ class Language:
     def load_files(self):
         languages = {}
         lang_files = {file.stem: file for file in self.lang_dir.glob("*.json")}
+
         for lang_code, lang_file in lang_files.items():
             with open(lang_file, "r", encoding="utf-8") as file:
                 languages[lang_code] = json.load(file)
+
         logger.info(f"Loaded languages: {', '.join(languages.keys())}")
         return languages
 
@@ -55,10 +58,39 @@ class Language:
         files = {f.stem for f in self.lang_dir.glob("*.json")}
         return {code: self.lang_codes[code] for code in sorted(files)}
 
+    # ✅ NEW: Language Menu with Close Button
+    def build_lang_menu(self):
+        buttons = []
+        row = []
+
+        for code, name in self.get_languages().items():
+            row.append(
+                InlineKeyboardButton(
+                    text=name,
+                    callback_data=f"set_lang_{code}"
+                )
+            )
+
+            if len(row) == 2:  # 2 buttons per row
+                buttons.append(row)
+                row = []
+
+        if row:
+            buttons.append(row)
+
+        # ✅ Close button at bottom
+        buttons.append(
+            [InlineKeyboardButton("❌ Close", callback_data="close_lang")]
+        )
+
+        return InlineKeyboardMarkup(buttons)
+
+    # ✅ Decorator
     def language(self):
         def decorator(func):
             @wraps(func)
             async def wrapper(*args, **kwargs):
+
                 fallen = next(
                     (
                         arg
@@ -68,31 +100,45 @@ class Language:
                     None,
                 )
 
-                if not fallen.from_user:
+                if not fallen or not fallen.from_user:
                     return
 
+                # Get chat
                 if hasattr(fallen, "chat"):
                     chat = fallen.chat
                 elif hasattr(fallen, "message"):
                     chat = fallen.message.chat
+                else:
+                    return
 
-                if not chat: return
+                if not chat:
+                    return
 
+                # Blacklist check
                 if chat.id in db.blacklisted:
                     logger.info(f"Chat {chat.id} is blacklisted, leaving...")
                     return await chat.leave()
 
+                # Load language
                 lang_code = await db.get_lang(chat.id)
-                lang_dict = self.languages[lang_code]
+                lang_dict = self.languages.get(lang_code, self.languages["en"])
 
+                # Attach lang
                 setattr(fallen, "lang", lang_dict)
+
                 try:
                     return await func(*args, **kwargs)
-                except (errors.ChannelPrivate, errors.MessageIdInvalid, errors.MessageNotModified):
-                    return
+
                 except (
-                    errors.Forbidden, errors.exceptions.Forbidden,
-                    errors.ChatWriteForbidden, errors.exceptions.ChatWriteForbidden,
+                    errors.ChannelPrivate,
+                    errors.MessageIdInvalid,
+                    errors.MessageNotModified,
+                ):
+                    return
+
+                except (
+                    errors.Forbidden,
+                    errors.ChatWriteForbidden,
                 ):
                     return
 
