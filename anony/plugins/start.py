@@ -30,7 +30,7 @@ async def start(_, message: types.Message):
 
     private = message.chat.type == enums.ChatType.PRIVATE
 
-    # /start help support
+    # /start help
     if len(message.command) > 1 and message.command[1] == "help":
         return await _help(_, message)
 
@@ -54,17 +54,16 @@ async def start(_, message: types.Message):
         # ── GROUP START ──
         _text = message.lang["start_gp"].format(app.name)
 
-        # ✅ Custom layout: Language (top), Channel (bottom)
-        key = buttons.ikm(
+        key = types.InlineKeyboardMarkup(
             [
                 [
-                    buttons.ikb(
+                    types.InlineKeyboardButton(
                         text=message.lang["language"],
                         callback_data="language",
                     )
                 ],
                 [
-                    buttons.ikb(
+                    types.InlineKeyboardButton(
                         text=message.lang["channel"],
                         url=config.SUPPORT_CHANNEL,
                     )
@@ -84,11 +83,51 @@ async def start(_, message: types.Message):
             await db.add_chat(message.chat.id)
 
 
-# ─── HELP BUTTON CLICK (FIXED) ───
+# ─── OPEN LANGUAGE MENU ───
+@app.on_callback_query(filters.regex("^language$"))
+async def open_language(_, query: types.CallbackQuery):
+    await query.message.edit_reply_markup(
+        reply_markup=lang.build_lang_menu()
+    )
+
+
+# ─── CLOSE LANGUAGE MENU ───
+@app.on_callback_query(filters.regex("^close_lang$"))
+@lang.language()
+async def close_lang(_, query: types.CallbackQuery):
+    _lang = query.lang
+    private = query.message.chat.type == enums.ChatType.PRIVATE
+
+    if private:
+        # Back to PM start buttons
+        markup = buttons.start_key(_lang, private=True)
+    else:
+        # Back to GROUP buttons
+        markup = types.InlineKeyboardMarkup(
+            [
+                [
+                    types.InlineKeyboardButton(
+                        text=_lang["language"],
+                        callback_data="language",
+                    )
+                ],
+                [
+                    types.InlineKeyboardButton(
+                        text=_lang["channel"],
+                        url=config.SUPPORT_CHANNEL,
+                    )
+                ],
+            ]
+        )
+
+    await query.message.edit_reply_markup(reply_markup=markup)
+
+
+# ─── HELP BUTTON CLICK ───
 @app.on_callback_query(filters.regex("^help$"))
 @lang.language()
 async def help_cb(_, query: types.CallbackQuery):
-    _lang = query.lang  # ✅ FIXED (no underscore)
+    _lang = query.lang
 
     await query.message.edit_reply_markup(
         reply_markup=buttons.help_markup(_lang)
