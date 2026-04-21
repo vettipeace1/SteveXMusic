@@ -12,7 +12,7 @@
 #  Bot API 9.4 button style values:
 #    style="primary"     →  🔵 BLUE
 #    style="success"     →  🟢 GREEN
-#    style="danger" →  🔴 RED
+#    style="danger"      →  🔴 RED
 #    (no style)          →  default (desaturated navy blue)
 #
 #  Colour rules:
@@ -24,7 +24,14 @@
 #   6) Timer during playing  → 🔴 RED     (style="danger")
 # ══════════════════════════════════════════════════════════════════════════════
 
-from pyrogram import types
+# ✅ FIX: Import from kurigram, NOT pyrogram.
+# The style= colour parameter only exists in kurigram dev.
+# Using "from pyrogram import types" will silently ignore style= and
+# buttons will always appear as the default grey/navy colour.
+try:
+    from kurigram import types
+except ImportError:
+    from pyrogram import types  # fallback (no colour support)
 
 from anony import app, config, lang
 from anony.core.lang import lang_codes
@@ -89,8 +96,8 @@ class Inline:
         if back:
             rows = [
                 [
-                    _ikb(_lang["back"],  style="success",     callback_data="help back"),   # Rule 4: 🟢
-                    _ikb(_lang["close"], style="danger", callback_data="help close"),  # Rule 5: 🔴
+                    _ikb(_lang["back"],  style="success", callback_data="help back"),   # Rule 4: 🟢
+                    _ikb(_lang["close"], style="danger",  callback_data="help close"),  # Rule 5: 🔴
                 ]
             ]
         else:
