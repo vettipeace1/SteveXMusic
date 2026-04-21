@@ -17,7 +17,6 @@ async def _help(_, message: types.Message):
         video=config.START_VDO,
         caption=message.lang["help_menu"],
         reply_markup=buttons.help_markup(message.lang),
-        parse_mode=enums.ParseMode.HTML
     )
 
 
@@ -31,7 +30,7 @@ async def start(_, message: types.Message):
 
     private = message.chat.type == enums.ChatType.PRIVATE
 
-    # /start help
+    # /start help support
     if len(message.command) > 1 and message.command[1] == "help":
         return await _help(_, message)
 
@@ -45,7 +44,6 @@ async def start(_, message: types.Message):
             video=config.START_VDO,
             caption=_text,
             reply_markup=buttons.start_key(message.lang, private=True),
-            parse_mode=enums.ParseMode.HTML
         )
 
         if not await db.is_user(message.from_user.id):
@@ -56,6 +54,7 @@ async def start(_, message: types.Message):
         # ── GROUP START ──
         _text = message.lang["start_gp"].format(app.name)
 
+        # ✅ Custom layout: Language (top), Channel (bottom)
         key = buttons.ikm(
             [
                 [
@@ -78,7 +77,6 @@ async def start(_, message: types.Message):
             caption=_text,
             reply_markup=key,
             quote=True,
-            parse_mode=enums.ParseMode.HTML
         )
 
         if not await db.is_chat(message.chat.id):
@@ -86,76 +84,17 @@ async def start(_, message: types.Message):
             await db.add_chat(message.chat.id)
 
 
-# ─── HELP BUTTON ───
-@app.on_callback_query(filters.regex("^help$"))
+# ─── HELP BUTTON CLICK (FIXED) ───
+@app.on_callback_query(filters.regex("^help"))
 @lang.language()
 async def help_cb(_, query):
-    _lang = query._lang
+
+    _lang = query._lang  # ✅ FIX
 
     await query.message.edit_caption(
         caption=_lang["help_menu"],
         reply_markup=buttons.help_markup(_lang),
-        parse_mode=enums.ParseMode.HTML
     )
-
-
-# ─── LANGUAGE BUTTON ───
-@app.on_callback_query(filters.regex("^language$"))
-@lang.language()
-async def language_cb(_, query):
-    _lang = query._lang
-
-    await query.message.edit_caption(
-        caption=_lang["choose_lang"],
-        reply_markup=buttons.lang_markup(_lang["code"]),
-        parse_mode=enums.ParseMode.HTML
-    )
-
-
-# ─── LANGUAGE BACK ───
-@app.on_callback_query(filters.regex("^lang_back$"))
-@lang.language()
-async def lang_back(_, query):
-    _lang = query._lang
-    is_private = query.message.chat.type == enums.ChatType.PRIVATE
-
-    if is_private:
-        # ✅ BACK TO HELP MENU
-        await query.message.edit_caption(
-            caption=_lang["help_menu"],
-            reply_markup=buttons.help_markup(_lang),
-            parse_mode=enums.ParseMode.HTML
-        )
-    else:
-        # ✅ BACK TO GROUP START
-        key = buttons.ikm(
-            [
-                [
-                    buttons.ikb(
-                        text=_lang["language"],
-                        callback_data="language",
-                    )
-                ],
-                [
-                    buttons.ikb(
-                        text=_lang["channel"],
-                        url=config.SUPPORT_CHANNEL,
-                    )
-                ],
-            ]
-        )
-
-        await query.message.edit_caption(
-            caption=_lang["start_gp"].format(app.name),
-            reply_markup=key,
-            parse_mode=enums.ParseMode.HTML
-        )
-
-
-# ─── LANGUAGE CLOSE ───
-@app.on_callback_query(filters.regex("^lang_close$"))
-async def lang_close(_, query):
-    await query.message.delete()
 
 
 # ─── SETTINGS ───
