@@ -6,10 +6,10 @@ import asyncio
 from pyrogram import enums, filters, types
 
 from anony import app, config, db, lang
-from anony.helpers import buttons, utils
+from anony.helpers import utils, buttons
 
 
-# ─── HELP COMMAND ───
+# ─── HELP COMMAND (PM) ───
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
 async def _help(_, message: types.Message):
@@ -24,37 +24,51 @@ async def _help(_, message: types.Message):
 @app.on_message(filters.command(["start"]))
 @lang.language()
 async def start(_, message: types.Message):
+
     if message.from_user.id in app.bl_users and message.from_user.id not in db.notified:
         return await message.reply_text(message.lang["bl_user_notify"])
 
     private = message.chat.type == enums.ChatType.PRIVATE
 
-    # ─── IF /start help ───
+    # /start help
     if len(message.command) > 1 and message.command[1] == "help":
         return await _help(_, message)
 
     if private:
-        # ── PM START ──
+        # ── PM START (NO CHANGE) ──
         _text = message.lang["start_pm"].format(
             message.from_user.first_name, app.name
         )
-        key = buttons.start_key(message.lang, private=True)
 
-        sent = await message.reply_video(
+        await message.reply_video(
             video=config.START_VDO,
             caption=_text,
-            reply_markup=key,
+            reply_markup=buttons.start_key(message.lang, private=True),
         )
 
-        # Save user
         if not await db.is_user(message.from_user.id):
             await utils.send_log(message)
             await db.add_user(message.from_user.id)
 
     else:
-        # ── GROUP START ──
+        # ── GROUP START (CUSTOM BUTTONS) ──
         _text = message.lang["start_gp"].format(app.name)
-        key = buttons.start_key_group(message.lang)
+
+        # 🔥 CUSTOM GROUP BUTTONS (NO HELP)
+        key = buttons.ikm(
+            [
+                [
+                    buttons.ikb(
+                        text=message.lang["language"],
+                        callback_data="language",
+                    ),
+                    buttons.ikb(
+                        text=message.lang["channel"],
+                        url=config.SUPPORT_CHANNEL,
+                    ),
+                ]
+            ]
+        )
 
         await message.reply_video(
             video=config.START_VDO,
@@ -68,10 +82,21 @@ async def start(_, message: types.Message):
             await db.add_chat(message.chat.id)
 
 
+# ─── HELP CALLBACK (WORKING) ───
+@app.on_callback_query(filters.regex("^help"))
+@lang.language()
+async def help_cb(_, query):
+    await query.message.edit_caption(
+        caption=query.message.lang["help_menu"],
+        reply_markup=buttons.help_markup(query.message.lang),
+    )
+
+
 # ─── SETTINGS ───
 @app.on_message(filters.command(["playmode", "settings"]) & filters.group & ~app.bl_users)
 @lang.language()
 async def settings(_, message: types.Message):
+
     admin_only = await db.get_play_mode(message.chat.id)
     cmd_delete = await db.get_cmd_delete(message.chat.id)
     _language = await db.get_lang(message.chat.id)
@@ -89,6 +114,7 @@ async def settings(_, message: types.Message):
 @app.on_message(filters.new_chat_members, group=7)
 @lang.language()
 async def _new_member(_, message: types.Message):
+
     if message.chat.type != enums.ChatType.SUPERGROUP:
         return await message.chat.leave()
 
