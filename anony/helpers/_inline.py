@@ -67,17 +67,27 @@ class Inline:
         return self.ikm(rows)
 
     def lang_markup(self, _lang: str) -> types.InlineKeyboardMarkup:
-        langs = lang.get_languages()
+    langs = lang.get_languages()
 
-        buttons = [
-            self.ikb(
-                text=f"{name} ({code}) {'✔️' if code == _lang else ''}",
-                callback_data=f"lang_change {code}",
-            )
-            for code, name in langs.items()
+    buttons = [
+        self.ikb(
+            text=f"{name} ({code}) {'✔️' if code == _lang else ''}",
+            callback_data=f"lang_change {code}",
+        )
+        for code, name in langs.items()
+    ]
+
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+
+    # 🔥 ADD BACK + CLOSE BUTTONS
+    rows.append(
+        [
+            self.ikb(text="Back", callback_data="lang_back"),
+            self.ikb(text="Close", callback_data="lang_close"),
         ]
-        rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-        return self.ikm(rows)
+    )
+
+    return self.ikm(rows)
 
     def ping_markup(self, text: str) -> types.InlineKeyboardMarkup:
         return self.ikm([[self.ikb(text=text, url=config.SUPPORT_CHAT)]])
