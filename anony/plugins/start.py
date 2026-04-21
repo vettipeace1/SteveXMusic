@@ -9,65 +9,73 @@ from anony import app, config, db, lang
 from anony.helpers import buttons, utils
 
 
+# ─── HELP COMMAND ───
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
-async def _help(_, m: types.Message):
+async def _help(_, message: types.Message):
     await message.reply_video(
         video=config.START_VDO,
-        caption=m.lang["help_menu"],
-        reply_markup=button.help_markup(m.lang,
-        quote=not private,
+        caption=message.lang["help_menu"],
+        reply_markup=buttons.help_markup(message.lang),
     )
 
+
+# ─── START COMMAND ───
 @app.on_message(filters.command(["start"]))
 @lang.language()
 async def start(_, message: types.Message):
     if message.from_user.id in app.bl_users and message.from_user.id not in db.notified:
         return await message.reply_text(message.lang["bl_user_notify"])
 
+    private = message.chat.type == enums.ChatType.PRIVATE
+
+    # ─── IF /start help ───
     if len(message.command) > 1 and message.command[1] == "help":
         return await _help(_, message)
 
-    private = message.chat.type == enums.ChatType.PRIVATE
-
     if private:
-        # ── PM: video + full buttons (Add to group, Help, Support, Channel, Source)
+        # ── PM START ──
         _text = message.lang["start_pm"].format(
             message.from_user.first_name, app.name
         )
         key = buttons.start_key(message.lang, private=True)
-        await message.reply_video(
+
+        sent = await message.reply_video(
             video=config.START_VDO,
             caption=_text,
             reply_markup=key,
         )
-        if await db.is_user(message.from_user.id):
-            returns
-        await utils.send_log(message)
-        await db.add_user(message.from_user.id)
+
+        # Save user
+        if not await db.is_user(message.from_user.id):
+            await utils.send_log(message)
+            await db.add_user(message.from_user.id)
 
     else:
-        # ── GROUP: video + Help and Language buttons only
+        # ── GROUP START ──
         _text = message.lang["start_gp"].format(app.name)
         key = buttons.start_key_group(message.lang)
+
         await message.reply_video(
             video=config.START_VDO,
             caption=_text,
             reply_markup=key,
             quote=True,
         )
-        if await db.is_chat(message.chat.id):
-            return
-        await utils.send_log(message, True)
-        await db.add_chat(message.chat.id)
+
+        if not await db.is_chat(message.chat.id):
+            await utils.send_log(message, True)
+            await db.add_chat(message.chat.id)
 
 
+# ─── SETTINGS ───
 @app.on_message(filters.command(["playmode", "settings"]) & filters.group & ~app.bl_users)
 @lang.language()
 async def settings(_, message: types.Message):
     admin_only = await db.get_play_mode(message.chat.id)
     cmd_delete = await db.get_cmd_delete(message.chat.id)
     _language = await db.get_lang(message.chat.id)
+
     await message.reply_text(
         text=message.lang["start_settings"].format(message.chat.title),
         reply_markup=buttons.settings_markup(
@@ -77,6 +85,7 @@ async def settings(_, message: types.Message):
     )
 
 
+# ─── NEW MEMBER ───
 @app.on_message(filters.new_chat_members, group=7)
 @lang.language()
 async def _new_member(_, message: types.Message):
@@ -84,6 +93,7 @@ async def _new_member(_, message: types.Message):
         return await message.chat.leave()
 
     await asyncio.sleep(3)
+
     for member in message.new_chat_members:
         if member.id == app.id:
             if await db.is_chat(message.chat.id):
