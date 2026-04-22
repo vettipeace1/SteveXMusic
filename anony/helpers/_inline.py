@@ -2,166 +2,209 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
-from pyrogram import types
 
-from anony import app, config, lang
-from anony.core.lang import lang_codes
+import re
 
+from pyrogram import errors, filters, types
 
-def _ikb(text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
-    """Build button and store style as plain attribute for styled_send to read."""
-    btn = types.InlineKeyboardButton(text=text, **kwargs)
-    btn.style = style
-    return btn
+from anony import anon, app, db, lang, queue, tg, yt
+from anony.helpers import admin_check, buttons, can_manage_vc
+from anony.helpers.styled_send import edit_styled, send_styled
 
 
-class Inline:
-    def __init__(self):
-        self.ikm = types.InlineKeyboardMarkup
+@app.on_callback_query(filters.regex("cancel_dl") & ~app.bl_users)
+@lang.language()
+async def cancel_dl(_, query: types.CallbackQuery):
+    await query.answer()
+    await tg.cancel(query)
 
-    # ── ikb as method ────────────────────────────────────────────────────────
-    def ikb(self, text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
-        return _ikb(text, style=style, **kwargs)
 
-    def cancel_dl(self, text) -> types.InlineKeyboardMarkup:
-        return self.ikm([[_ikb(text, callback_data="cancel_dl")]])
+@app.on_callback_query(filters.regex("controls") & ~app.bl_users)
+@lang.language()
+@can_manage_vc
+async def _controls(_, query: types.CallbackQuery):
+    args = query.data.split()
+    action, chat_id = args[1], int(args[2])
+    qaction = len(args) == 4
+    user = query.from_user.mention
 
-    def controls(
-        self,
-        chat_id: int,
-        status: str = None,   # e.g. lang["paused"]  → RED
-        timer: str = None,    # e.g. "02:17 | ——●——— | -02:45" → GREEN
-        remove: bool = False,
-    ) -> types.InlineKeyboardMarkup:
-        keyboard = []
+    if not await db.get_call(chat_id):
+        try:
+            return await query.answer(query.lang["not_playing"], show_alert=True)
+        except errors.QueryIdInvalid:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            return
 
-        if status:
-            # Stream paused / stopped / skipped → 🔴 RED
-            keyboard.append(
-                [_ikb(status, style="danger", callback_data=f"controls status {chat_id}")]
+    if action == "status":
+        return await query.answer()
+    await query.answer(query.lang["processing"], show_alert=True)
+
+    if action == "pause":
+        if not await db.playing(chat_id):
+            return await query.answer(
+                query.lang["play_already_paused"], show_alert=True
             )
-        elif timer:
-            # Timer row → 🟢 GREEN
-            keyboard.append(
-                [_ikb(timer, style="success", callback_data=f"controls status {chat_id}")]
+        await anon.pause(chat_id)
+        if qaction:
+            return await query.edit_message_reply_markup(
+                reply_markup=buttons.queue_markup(chat_id, query.lang["paused"], False)
             )
+        # 🔴 RED — pass status so danger style is used
+        status = query.lang["paused"]
+        reply = query.lang["play_paused"].format(user)
 
-        if not remove:
-            keyboard.append(
-                [
-                    _ikb("▷",   callback_data=f"controls resume {chat_id}"),
-                    _ikb("II",  callback_data=f"controls pause {chat_id}"),
-                    _ikb("⥁",   callback_data=f"controls replay {chat_id}"),
-                    _ikb("‣‣I", callback_data=f"controls skip {chat_id}"),
-                    _ikb("▢",   callback_data=f"controls stop {chat_id}"),
-                ]
+    elif action == "resume":
+        if await db.playing(chat_id):
+            return await query.answer(query.lang["play_not_paused"], show_alert=True)
+        await anon.resume(chat_id)
+        if qaction:
+            return await query.edit_message_reply_markup(
+                reply_markup=buttons.queue_markup(chat_id, query.lang["playing"], True)
             )
-        return self.ikm(keyboard)
+        reply = query.lang["play_resumed"].format(user)
+        status = None  # resume → no status → green timer shows
 
-    def help_markup(
-        self, _lang: dict, back: bool = False
-    ) -> types.InlineKeyboardMarkup:
-        if back:
-            rows = [
-                [
-                    _ikb(_lang["back"],  style="success", callback_data="help back"),   # 🟢 GREEN
-                    _ikb(_lang["close"], style="danger",  callback_data="help close"),  # 🔴 RED
-                ]
-            ]
+    elif action == "skip":
+        await anon.play_next(chat_id)
+        status = query.lang["skipped"]
+        reply = query.lang["play_skipped"].format(user)
+
+    elif action == "force":
+        pos, media = queue.check_item(chat_id, args[3])
+        if not media or pos == -1:
+            return await query.edit_message_text(query.lang["play_expired"])
+
+        m_id = queue.get_current(chat_id).message_id
+        queue.force_add(chat_id, media, remove=pos)
+        try:
+            await app.delete_messages(
+                chat_id=chat_id, message_ids=[m_id, media.message_id], revoke=True
+            )
+            media.message_id = None
+        except Exception:
+            pass
+
+        msg = await app.send_message(chat_id=chat_id, text=query.lang["play_next"])
+        if not media.file_path:
+            media.file_path = await yt.download(media.id, video=media.video)
+        media.message_id = msg.id
+        return await anon.play_media(chat_id, msg, media)
+
+    elif action == "replay":
+        media = queue.get_current(chat_id)
+        media.user = user
+        await anon.replay(chat_id)
+        status = query.lang["replayed"]
+        reply = query.lang["play_replayed"].format(user)
+
+    elif action == "stop":
+        await anon.stop(chat_id)
+        status = query.lang["stopped"]
+        reply = query.lang["play_stopped"].format(user)
+
+    try:
+        if action in ["skip", "replay", "stop"]:
+            await query.message.reply_text(reply, quote=False)
+            await query.message.delete()
         else:
-            cbs = ["admins", "auth", "blist", "lang", "ping", "play", "queue", "stats", "sudo"]
-            btns = [
-                _ikb(_lang[f"help_{i}"], callback_data=f"help {cb}")
-                for i, cb in enumerate(cbs)
-            ]
-            rows = [btns[i : i + 3] for i in range(0, len(btns), 3)]
-
-        return self.ikm(rows)
-
-    def lang_markup(self, _lang: str) -> types.InlineKeyboardMarkup:
-        langs = lang.get_languages()
-        btns = [
-            _ikb(
-                f"{name} ({code}) {'✔️' if code == _lang else ''}",
-                callback_data=f"lang_change {code}",
+            mtext = re.sub(
+                r"\n\n<blockquote>.*?</blockquote>",
+                "",
+                query.message.caption.html if query.message.caption else query.message.text.html,
+                flags=re.DOTALL,
             )
-            for code, name in langs.items()
-        ]
-        rows = [btns[i : i + 2] for i in range(0, len(btns), 2)]
-        return self.ikm(rows)
+            new_text = f"{mtext}\n\n<blockquote>{reply}</blockquote>"
+            keyboard = buttons.controls(
+                chat_id, status=status if action != "resume" else None
+            )
+            # FIX: use edit_styled with caption= or text= so style= colours work
+            if query.message.caption:
+                # photo/video message → editMessageCaption
+                await edit_styled(
+                    chat_id=query.message.chat.id,
+                    message_id=query.message.id,
+                    caption=new_text,
+                    reply_markup=keyboard,
+                )
+            else:
+                # plain text message → editMessageText
+                await edit_styled(
+                    chat_id=query.message.chat.id,
+                    message_id=query.message.id,
+                    text=new_text,
+                    reply_markup=keyboard,
+                )
+    except Exception:
+        pass
 
-    def ping_markup(self, text: str) -> types.InlineKeyboardMarkup:
-        return self.ikm([[_ikb(text, url=config.SUPPORT_CHAT)]])
 
-    def play_queued(
-        self, chat_id: int, item_id: str, _text: str
-    ) -> types.InlineKeyboardMarkup:
-        return self.ikm(
-            [[_ikb(_text, callback_data=f"controls force {chat_id} {item_id}")]]
+# ── HELP CALLBACKS ────────────────────────────────────────────────────────────
+@app.on_callback_query(filters.regex("help") & ~app.bl_users)
+@lang.language()
+async def _help(_, query: types.CallbackQuery):
+    data = query.data.split()
+    if len(data) == 1:
+        return await query.answer(url=f"https://t.me/{app.username}?start=help")
+
+    if data[1] == "back":
+        # FIX: use edit_styled with caption= → editMessageCaption → colours work
+        await edit_styled(
+            chat_id=query.message.chat.id,
+            message_id=query.message.id,
+            caption=query.lang["help_menu"],
+            reply_markup=buttons.help_markup(query.lang),
         )
+        return await query.answer()
 
-    def queue_markup(
-        self, chat_id: int, _text: str, playing: bool
-    ) -> types.InlineKeyboardMarkup:
-        _action = "pause" if playing else "resume"
-        return self.ikm(
-            [[_ikb(_text, callback_data=f"controls {_action} {chat_id} q")]]
+    elif data[1] == "close":
+        try:
+            await query.message.delete()
+            await query.message.reply_to_message.delete()
+        except Exception:
+            pass
+        return await query.answer()
+
+    # Sub-help page — show with 🟢 Back + 🔴 Close buttons
+    # FIX: use edit_styled with caption= so colours work
+    await edit_styled(
+        chat_id=query.message.chat.id,
+        message_id=query.message.id,
+        caption=query.lang[f"help_{data[1]}"],
+        reply_markup=buttons.help_markup(query.lang, back=True),
+    )
+    await query.answer()
+
+
+@app.on_callback_query(filters.regex("settings") & ~app.bl_users)
+@lang.language()
+@admin_check
+async def _settings_cb(_, query: types.CallbackQuery):
+    cmd = query.data.split()
+    if len(cmd) == 1:
+        return await query.answer()
+    await query.answer(query.lang["processing"], show_alert=True)
+
+    chat_id = query.message.chat.id
+    _admin = await db.get_play_mode(chat_id)
+    _delete = await db.get_cmd_delete(chat_id)
+    _language = await db.get_lang(chat_id)
+
+    if cmd[1] == "delete":
+        _delete = not _delete
+        await db.set_cmd_delete(chat_id, _delete)
+    elif cmd[1] == "play":
+        await db.set_play_mode(chat_id, _admin)
+        _admin = not _admin
+
+    await query.edit_message_reply_markup(
+        reply_markup=buttons.settings_markup(
+            query.lang,
+            _admin,
+            _delete,
+            _language,
+            chat_id,
         )
-
-    def settings_markup(
-        self, lang: dict, admin_only: bool, cmd_delete: bool, language: str, chat_id: int
-    ) -> types.InlineKeyboardMarkup:
-        return self.ikm(
-            [
-                [
-                    _ikb(lang["play_mode"] + " ➜", callback_data="settings"),
-                    _ikb(admin_only, callback_data="settings play"),
-                ],
-                [
-                    _ikb(lang["cmd_delete"] + " ➜", callback_data="settings"),
-                    _ikb(cmd_delete, callback_data="settings delete"),
-                ],
-                [
-                    _ikb(lang["language"] + " ➜", callback_data="settings"),
-                    _ikb(lang_codes[language], callback_data="language"),
-                ],
-            ]
-        )
-
-    def start_key(
-        self, lang: dict, private: bool = False
-    ) -> types.InlineKeyboardMarkup:
-        rows = [
-            [_ikb(lang["add_me"], style="primary",
-                  url=f"https://t.me/{app.username}?startgroup=true")],
-            [_ikb(lang["help"], style="success", callback_data="help")],
-            [
-                _ikb(lang["support"], url=config.SUPPORT_CHAT),
-                _ikb(lang["channel"], url=config.SUPPORT_CHANNEL),
-            ],
-        ]
-
-        if private:
-            rows += [[_ikb(lang["source"], style="danger", url="https://t.me/vettipeace")]]
-        else:
-            rows += [[_ikb(lang["language"], callback_data="language")]]
-
-        return self.ikm(rows)
-
-    def start_key_group(self, lang: dict) -> types.InlineKeyboardMarkup:
-        return self.ikm(
-            [
-                [_ikb(lang["help"],     style="success", callback_data="help")],
-                [_ikb(lang["language"], callback_data="language")],
-            ]
-        )
-
-    def yt_key(self, link: str) -> types.InlineKeyboardMarkup:
-        return self.ikm(
-            [
-                [
-                    _ikb("❐", copy_text=link),
-                    _ikb("Youtube", url=link),
-                ],
-            ]
-        )
+    )
