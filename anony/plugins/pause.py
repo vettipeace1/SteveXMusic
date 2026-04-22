@@ -2,11 +2,11 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
+
 from pyrogram import filters, types
 
 from anony import anon, app, db, lang
 from anony.helpers import buttons, can_manage_vc
-from anony.helpers.styled_send import send_styled
 
 
 @app.on_message(filters.command(["pause"]) & filters.group & ~app.bl_users)
@@ -20,11 +20,7 @@ async def _pause(_, m: types.Message):
         return await m.reply_text(m.lang["play_already_paused"])
 
     await anon.pause(m.chat.id)
-
-    # Use send_styled so "Stream paused" button shows 🔴 RED colour
-    await send_styled(
-        chat_id=m.chat.id,
+    await m.reply_text(
         text=m.lang["play_paused"].format(m.from_user.mention),
         reply_markup=buttons.controls(m.chat.id),
-        reply_to_message_id=m.id,
     )
