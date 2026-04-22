@@ -2,17 +2,6 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  Colour rules:
-#   play_queued "Play Now"   → 🔵 BLUE    (style="primary")
-#   Back buttons             → 🟢 GREEN   (style="success")
-#   Close buttons            → 🔴 RED     (style="danger")
-#   Stream paused / Timer    → 🔴 RED     (style="danger")
-#   Add me to your group     → 🔵 BLUE    (style="primary")
-#   Help                     → 🟢 GREEN   (style="success")
-#   Source                   → 🔴 RED     (style="danger")
-# ══════════════════════════════════════════════════════════════════════════════
-
 from pyrogram import types
 
 from anony import app, config, lang
@@ -20,7 +9,6 @@ from anony.core.lang import lang_codes
 
 
 def _ikb(text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
-    """Build button and store style as plain attribute for styled_send to read."""
     btn = types.InlineKeyboardButton(text=text, **kwargs)
     btn.style = style
     return btn
@@ -51,7 +39,7 @@ class Inline:
                 [_ikb(status, style="danger", callback_data=f"controls status {chat_id}")]
             )
         elif timer:
-            # Timer counting → 🟢 GREEN (like Jerry)
+            # Timer counting → 🟢 GREEN
             keyboard.append(
                 [_ikb(timer, style="success", callback_data=f"controls status {chat_id}")]
             )
@@ -74,8 +62,8 @@ class Inline:
         if back:
             rows = [
                 [
-                    _ikb(_lang["back"],  style="success", callback_data="help back"),   # 🟢 GREEN
-                    _ikb(_lang["close"], style="danger",  callback_data="help close"),  # 🔴 RED
+                    _ikb(_lang["back"],  style="success", callback_data="help back"),  # 🟢
+                    _ikb(_lang["close"], style="danger",  callback_data="help close"), # 🔴
                 ]
             ]
         else:
@@ -85,7 +73,6 @@ class Inline:
                 for i, cb in enumerate(cbs)
             ]
             rows = [btns[i : i + 3] for i in range(0, len(btns), 3)]
-
         return self.ikm(rows)
 
     def lang_markup(self, _lang: str) -> types.InlineKeyboardMarkup:
@@ -106,7 +93,7 @@ class Inline:
     def play_queued(
         self, chat_id: int, item_id: str, _text: str
     ) -> types.InlineKeyboardMarkup:
-        # "Play Now" → 🔵 BLUE (like Jerry)
+        # "Play Now" → 🔵 BLUE
         return self.ikm(
             [[_ikb(_text, style="primary", callback_data=f"controls force {chat_id} {item_id}")]]
         )
@@ -143,30 +130,24 @@ class Inline:
         self, lang: dict, private: bool = False
     ) -> types.InlineKeyboardMarkup:
         rows = [
-            # Add me → 🔵 BLUE
             [_ikb(lang["add_me"], style="primary",
-                  url=f"https://t.me/{app.username}?startgroup=true")],
-            # Help → 🟢 GREEN
-            [_ikb(lang["help"], style="success", callback_data="help")],
-            # Support + Channel → default
+                  url=f"https://t.me/{app.username}?startgroup=true")],  # 🔵
+            [_ikb(lang["help"], style="success", callback_data="help")],  # 🟢
             [
                 _ikb(lang["support"], url=config.SUPPORT_CHAT),
                 _ikb(lang["channel"], url=config.SUPPORT_CHANNEL),
             ],
         ]
-
         if private:
-            # Source → 🔴 RED
-            rows += [[_ikb(lang["source"], style="danger", url="https://t.me/vettipeace")]]
+            rows += [[_ikb(lang["source"], style="danger", url="https://t.me/vettipeace")]]  # 🔴
         else:
             rows += [[_ikb(lang["language"], callback_data="language")]]
-
         return self.ikm(rows)
 
     def start_key_group(self, lang: dict) -> types.InlineKeyboardMarkup:
         return self.ikm(
             [
-                [_ikb(lang["help"],     style="success", callback_data="help")],  # 🟢 GREEN
+                [_ikb(lang["help"], style="success", callback_data="help")],  # 🟢
                 [_ikb(lang["language"], callback_data="language")],
             ]
         )
