@@ -67,10 +67,11 @@ class Inline:
                 ]
             ]
         else:
+            cbs = ["admins", "auth", "blist", "lang", "ping", "play", "queue", "stats", "sudo"]
             btns = [
-    _ikb(_lang[f"help_{i}"], callback_data=f"help {cb}")
-    for i, cb in enumerate(cbs)
-]
+                _ikb(_lang[f"help_{i}"], callback_data=f"help {cb}")
+                for i, cb in enumerate(cbs)
+            ]
             rows = [btns[i : i + 3] for i in range(0, len(btns), 3)]
         return self.ikm(rows)
 
