@@ -12,7 +12,7 @@ def _markup(markup) -> str:
     rows = []
     for row in markup.inline_keyboard:
         button_row = []
-        for buttonn in row:
+        for button in row:
             d = {"text": button.text}
             if getattr(button, "style", None):
                 d["style"] = button.style
