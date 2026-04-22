@@ -7,7 +7,7 @@ from pyrogram import enums, filters, types
 
 from anony import app, config, db, lang
 from anony.helpers import utils, buttons
-from anony.utils.styled_send import send_styled_video, send_styled, edit_styled
+from anony.helpers.styled_send import send_styled_video, send_styled, edit_styled
 
 
 # ─── HELP COMMAND (PM) ───
