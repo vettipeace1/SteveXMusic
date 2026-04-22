@@ -2,13 +2,13 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
-
 import re
 
 from pyrogram import errors, filters, types
 
 from anony import anon, app, db, lang, queue, tg, yt
 from anony.helpers import admin_check, buttons, can_manage_vc
+from anony.helpers.styled_send import edit_styled, edit_text_styled
 
 
 @app.on_callback_query(filters.regex("cancel_dl") & ~app.bl_users)
@@ -48,8 +48,11 @@ async def _controls(_, query: types.CallbackQuery):
             )
         await anon.pause(chat_id)
         if qaction:
-            return await query.edit_message_reply_markup(
-                reply_markup=buttons.queue_markup(chat_id, query.lang["paused"], False)
+            # 🔴 RED — paused state in queue
+            return await edit_styled(
+                chat_id=chat_id,
+                message_id=query.message.id,
+                reply_markup=buttons.queue_markup(chat_id, query.lang["paused"], False),
             )
         status = query.lang["paused"]
         reply = query.lang["play_paused"].format(user)
@@ -59,8 +62,11 @@ async def _controls(_, query: types.CallbackQuery):
             return await query.answer(query.lang["play_not_paused"], show_alert=True)
         await anon.resume(chat_id)
         if qaction:
-            return await query.edit_message_reply_markup(
-                reply_markup=buttons.queue_markup(chat_id, query.lang["playing"], True)
+            # 🟢 GREEN — playing state in queue
+            return await edit_styled(
+                chat_id=chat_id,
+                message_id=query.message.id,
+                reply_markup=buttons.queue_markup(chat_id, query.lang["playing"], True),
             )
         reply = query.lang["play_resumed"].format(user)
 
@@ -116,9 +122,13 @@ async def _controls(_, query: types.CallbackQuery):
             keyboard = buttons.controls(
                 chat_id, status=status if action != "resume" else None
             )
-        await query.edit_message_text(
-            f"{mtext}\n\n<blockquote>{reply}</blockquote>", reply_markup=keyboard
-        )
+            # Use HTTP Bot API so status button colour (🔴 paused) actually shows
+            await edit_text_styled(
+                chat_id=chat_id,
+                message_id=query.message.id,
+                text=f"{mtext}\n\n<blockquote>{reply}</blockquote>",
+                reply_markup=keyboard,
+            )
     except Exception:
         pass
 
@@ -131,8 +141,12 @@ async def _help(_, query: types.CallbackQuery):
         return await query.answer(url=f"https://t.me/{app.username}?start=help")
 
     if data[1] == "back":
-        return await query.edit_message_text(
-            text=query.lang["help_menu"], reply_markup=buttons.help_markup(query.lang)
+        # 🟢 GREEN Back, 🔴 RED Close — via HTTP Bot API so colours show
+        return await edit_text_styled(
+            chat_id=query.message.chat.id,
+            message_id=query.message.id,
+            text=query.lang["help_menu"],
+            reply_markup=buttons.help_markup(query.lang),
         )
     elif data[1] == "close":
         try:
@@ -141,7 +155,10 @@ async def _help(_, query: types.CallbackQuery):
         except Exception:
             return
 
-    await query.edit_message_text(
+    # Help submenu — show Back+Close with colours
+    await edit_text_styled(
+        chat_id=query.message.chat.id,
+        message_id=query.message.id,
         text=query.lang[f"help_{data[1]}"],
         reply_markup=buttons.help_markup(query.lang, True),
     )
@@ -167,6 +184,7 @@ async def _settings_cb(_, query: types.CallbackQuery):
     elif cmd[1] == "play":
         await db.set_play_mode(chat_id, _admin)
         _admin = not _admin
+
     await query.edit_message_reply_markup(
         reply_markup=buttons.settings_markup(
             query.lang,
