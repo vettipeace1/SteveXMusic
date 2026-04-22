@@ -120,7 +120,6 @@ async def _controls(_, query: types.CallbackQuery):
             keyboard = buttons.controls(
                 chat_id, status=status if action != "resume" else None
             )
-            # Controls message is a plain text message — use edit_text_styled
             await edit_text_styled(
                 chat_id=chat_id,
                 message_id=query.message.id,
@@ -131,23 +130,23 @@ async def _controls(_, query: types.CallbackQuery):
         pass
 
 
-@app.on_callback_query(filters.regex("help") & ~app.bl_users)
+@app.on_callback_query(filters.regex("^help") & ~app.bl_users)
 @lang.language()
 async def _help(_, query: types.CallbackQuery):
     data = query.data.split()
+    msg = query.message
 
-    # "help" alone → redirect to PM /start help
+    # "help" alone → redirect to PM
     if len(data) == 1:
         return await query.answer(url=f"https://t.me/{app.username}?start=help")
 
-    msg = query.message
-
     if data[1] == "back":
-        # Going back to help menu — only update the markup (Back/Close buttons coloured)
-        # Use edit_styled (markup only) because we don't want to change the video caption
-        await edit_styled(
+        # ✅ Restore the original help_menu caption AND show the main help buttons
+        # Must use edit_caption_styled because message is a VIDEO
+        await edit_caption_styled(
             chat_id=msg.chat.id,
             message_id=msg.id,
+            caption=query.lang["help_menu"],
             reply_markup=buttons.help_markup(query.lang),
         )
         return await query.answer()
@@ -160,8 +159,7 @@ async def _help(_, query: types.CallbackQuery):
             pass
         return
 
-    # Help submenu (admins, auth, blist, etc.)
-    # The message is a VIDEO — use edit_caption_styled to change caption + show Back/Close coloured
+    # Help submenu — change caption to submenu text, show Back🟢 + Close🔴
     await edit_caption_styled(
         chat_id=msg.chat.id,
         message_id=msg.id,
