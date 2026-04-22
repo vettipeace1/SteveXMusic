@@ -47,11 +47,16 @@ class Inline:
         if not remove:
             keyboard.append(
                 [
-                    _ikb("▷",   callback_data=f"controls resume {chat_id}"),
-                    _ikb("II",  callback_data=f"controls pause {chat_id}"),
-                    _ikb("⥁",   callback_data=f"controls replay {chat_id}"),
-                    _ikb("‣‣I", callback_data=f"controls skip {chat_id}"),
-                    _ikb("▢",   callback_data=f"controls stop {chat_id}"),
+                    # ▷ resume → 🟢 GREEN
+                    _ikb("▷",   style="success", callback_data=f"controls resume {chat_id}"),
+                    # II pause → 🔴 RED
+                    _ikb("II",  style="danger",  callback_data=f"controls pause {chat_id}"),
+                    # ⥁ replay → 🔵 BLUE
+                    _ikb("⥁",   style="primary", callback_data=f"controls replay {chat_id}"),
+                    # ‣‣I skip → no style (default)
+                    _ikb("‣‣I",                  callback_data=f"controls skip {chat_id}"),
+                    # ▢ stop → 🔴 RED
+                    _ikb("▢",   style="danger",  callback_data=f"controls stop {chat_id}"),
                 ]
             )
         return self.ikm(keyboard)
@@ -67,10 +72,11 @@ class Inline:
                 ]
             ]
         else:
+            # FIX: use cb name as both the lang key suffix AND the callback data
             cbs = ["admins", "auth", "blist", "lang", "ping", "play", "queue", "stats", "sudo"]
             btns = [
-                _ikb(_lang[f"help_{i}"], callback_data=f"help {cb}")
-                for i, cb in enumerate(cbs)
+                _ikb(_lang[f"help_{cb}"], callback_data=f"help {cb}")
+                for cb in cbs
             ]
             rows = [btns[i : i + 3] for i in range(0, len(btns), 3)]
         return self.ikm(rows)
