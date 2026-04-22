@@ -1,4 +1,4 @@
-# anony/helper/styled_send.py
+# anony/helpers/styled_send.py
 #
 # Sends messages/videos with coloured buttons via HTTP Bot API.
 # kurigram (MTProto) ignores style= — HTTP Bot API respects it.
@@ -19,7 +19,7 @@ def _markup(markup) -> str:
         btn_row = []
         for btn in row:
             d = {"text": btn.text}
-            # style= colour stored by inline.py / buttons.py as plain attribute
+            # style= colour stored as plain attribute by _ikb() in inline.py
             if getattr(btn, "style", None):
                 d["style"] = btn.style
             # action
@@ -44,7 +44,7 @@ async def send_styled_video(
     parse_mode: str = "html",
     reply_to_message_id: int = None,
 ) -> dict:
-    """Send a video with coloured inline buttons — replaces message.reply_video()."""
+    """Send a video with coloured buttons. Replaces message.reply_video()."""
     data = {
         "chat_id": chat_id,
         "video": video,
@@ -71,7 +71,7 @@ async def send_styled(
     parse_mode: str = "html",
     reply_to_message_id: int = None,
 ) -> dict:
-    """Send a text message with coloured inline buttons — replaces message.reply_text()."""
+    """Send a text message with coloured buttons. Replaces message.reply_text()."""
     data = {
         "chat_id": chat_id,
         "text": text,
@@ -96,7 +96,7 @@ async def edit_styled(
     message_id: int,
     reply_markup=None,
 ) -> dict:
-    """Edit reply markup only — replaces message.edit_reply_markup()."""
+    """Edit reply markup only. Replaces message.edit_reply_markup()."""
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
