@@ -37,6 +37,7 @@ async def send_styled_video(
     parse_mode: str = "html",
     reply_to_message_id: int = None,
 ) -> dict:
+    """Send a video with coloured buttons."""
     data = {
         "chat_id": chat_id,
         "video": video,
@@ -62,6 +63,7 @@ async def send_styled(
     parse_mode: str = "html",
     reply_to_message_id: int = None,
 ) -> dict:
+    """Send a text message with coloured buttons."""
     data = {
         "chat_id": chat_id,
         "text": text,
@@ -85,6 +87,7 @@ async def edit_styled(
     message_id: int,
     reply_markup=None,
 ) -> dict:
+    """Edit reply markup only — works for both text and video messages."""
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
@@ -99,6 +102,30 @@ async def edit_styled(
             return result
 
 
+async def edit_caption_styled(
+    chat_id: int,
+    message_id: int,
+    caption: str,
+    reply_markup=None,
+    parse_mode: str = "html",
+) -> dict:
+    """Edit caption + markup for VIDEO messages with coloured buttons."""
+    data = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "caption": caption,
+        "parse_mode": parse_mode,
+    }
+    if reply_markup:
+        data["reply_markup"] = _markup(reply_markup)
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{BASE}/editMessageCaption", data=data) as resp:
+            result = await resp.json()
+            if not result.get("ok"):
+                print(f"[styled_send] editCaption error: {result}")
+            return result
+
+
 async def edit_text_styled(
     chat_id: int,
     message_id: int,
@@ -106,6 +133,7 @@ async def edit_text_styled(
     reply_markup=None,
     parse_mode: str = "html",
 ) -> dict:
+    """Edit text + markup for TEXT messages with coloured buttons."""
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
