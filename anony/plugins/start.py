@@ -7,10 +7,10 @@ from pyrogram import enums, filters, types
 
 from anony import app, config, db, lang
 from anony.helpers import utils, buttons
-from anony.helpers.styled_send import send_styled_video, edit_styled
+from anony.helpers.styled_send import send_styled_video
 
 
-# ─── HELP COMMAND (PM) ───
+# ─── HELP COMMAND (PM only via /help command) ───
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
 async def _help(_, message: types.Message):
@@ -37,7 +37,6 @@ async def start(_, message: types.Message):
         return await _help(_, message)
 
     if private:
-        # ── PM START ──
         _text = message.lang["start_pm"].format(
             message.from_user.first_name, app.name
         )
@@ -53,9 +52,7 @@ async def start(_, message: types.Message):
             await db.add_user(message.from_user.id)
 
     else:
-        # ── GROUP START ──
         _text = message.lang["start_gp"].format(app.name)
-
         key = buttons.ikm(
             [
                 [buttons.ikb(text=message.lang["language"], callback_data="language")],
@@ -71,37 +68,6 @@ async def start(_, message: types.Message):
         if not await db.is_chat(message.chat.id):
             await utils.send_log(message, True)
             await db.add_chat(message.chat.id)
-
-
-# ─── HELP BUTTON CLICK ───
-@app.on_callback_query(filters.regex("^help$"))
-@lang.language()
-async def help_cb(_, query: types.CallbackQuery):
-    await edit_styled(
-        chat_id=query.message.chat.id,
-        message_id=query.message.id,
-        reply_markup=buttons.help_markup(query.lang),
-    )
-    await query.answer()
-
-
-# ─── HELP BACK — shows help menu again with Back+Close coloured ───
-@app.on_callback_query(filters.regex("^help back$"))
-@lang.language()
-async def help_back_cb(_, query: types.CallbackQuery):
-    await edit_styled(
-        chat_id=query.message.chat.id,
-        message_id=query.message.id,
-        reply_markup=buttons.help_markup(query.lang, back=True),
-    )
-    await query.answer()
-
-
-# ─── HELP CLOSE — deletes the message ───
-@app.on_callback_query(filters.regex("^help close$"))
-async def help_close_cb(_, query: types.CallbackQuery):
-    await query.message.delete()
-    await query.answer()
 
 
 # ─── SETTINGS ───
