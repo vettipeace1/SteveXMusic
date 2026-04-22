@@ -7,16 +7,19 @@ from pyrogram import enums, filters, types
 
 from anony import app, config, db, lang
 from anony.helpers import utils, buttons
+from anony.utils.styled_send import send_styled_video, send_styled, edit_styled
 
 
 # ─── HELP COMMAND (PM) ───
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
 async def _help(_, message: types.Message):
-    await message.reply_video(
+    await send_styled_video(
+        chat_id=message.chat.id,
         video=config.START_VDO,
         caption=message.lang["help_menu"],
         reply_markup=buttons.help_markup(message.lang),
+        reply_to_message_id=message.id,
     )
 
 
@@ -40,10 +43,12 @@ async def start(_, message: types.Message):
             message.from_user.first_name, app.name
         )
 
-        await message.reply_video(
+        await send_styled_video(
+            chat_id=message.chat.id,
             video=config.START_VDO,
             caption=_text,
             reply_markup=buttons.start_key(message.lang, private=True),
+            reply_to_message_id=message.id,
         )
 
         if not await db.is_user(message.from_user.id):
@@ -54,7 +59,8 @@ async def start(_, message: types.Message):
         # ── GROUP START ──
         _text = message.lang["start_gp"].format(app.name)
 
-        # ✅ Custom layout: Language (top), Channel (bottom)
+        # Custom layout: Language (top), Channel (bottom)
+        # Note: no style= needed here so plain kurigram is fine
         key = buttons.ikm(
             [
                 [
@@ -84,15 +90,18 @@ async def start(_, message: types.Message):
             await db.add_chat(message.chat.id)
 
 
-# ─── HELP BUTTON CLICK (FIXED) ───
+# ─── HELP BUTTON CLICK ───
 @app.on_callback_query(filters.regex("^help$"))
 @lang.language()
 async def help_cb(_, query: types.CallbackQuery):
-    _lang = query.lang  # ✅ FIXED (no underscore)
+    _lang = query.lang
 
-    await query.message.edit_reply_markup(
-        reply_markup=buttons.help_markup(_lang)
+    await edit_styled(
+        chat_id=query.message.chat.id,
+        message_id=query.message.id,
+        reply_markup=buttons.help_markup(_lang),
     )
+    await query.answer()
 
 
 # ─── SETTINGS ───
