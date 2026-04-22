@@ -14,7 +14,6 @@ from pytgcalls.pytgcalls_session import PyTgCallsSession
 from anony import (app, config, db, lang, logger,
                    queue, thumb, userbot, yt)
 from anony.helpers import Media, Track, buttons
-from anony.helpers.styled_send import send_styled, send_styled_photo
 
 
 class TgCall(PyTgCalls):
@@ -36,10 +35,12 @@ class TgCall(PyTgCalls):
         queue.clear(chat_id)
         await db.remove_call(chat_id)
         await db.set_loop(chat_id, 0)
+
         try:
             await client.leave_call(chat_id, close=False)
         except Exception:
             pass
+
 
     async def play_media(
         self,
@@ -87,47 +88,33 @@ class TgCall(PyTgCalls):
                     media.duration,
                     media.user,
                 )
-                # 🟢 GREEN timer button — pass timer= so controls() uses style="success"
-                keyboard = buttons.controls(chat_id, timer=media.duration)
-
+                keyboard = buttons.controls(chat_id)
                 try:
                     if _thumb:
-                        # Delete old message, send new photo via Bot API → colours work
-                        try:
-                            await message.delete()
-                        except Exception:
-                            pass
-                        result = await send_styled_photo(
+                        await message.edit_media(
+                            media=InputMediaPhoto(
+                                media=_thumb,
+                                caption=text,
+                            ),
+                            reply_markup=keyboard,
+                        )
+                    else:
+                        await message.edit_text(text, reply_markup=keyboard)
+                except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
+                    if _thumb:
+                        sent = await app.send_photo(
                             chat_id=chat_id,
                             photo=_thumb,
                             caption=text,
                             reply_markup=keyboard,
                         )
-                        if result.get("ok"):
-                            media.message_id = result["result"]["message_id"]
                     else:
-                        # No thumb — send plain text via Bot API → colours work
-                        try:
-                            await message.delete()
-                        except Exception:
-                            pass
-                        result = await send_styled(
+                        sent = await app.send_message(
                             chat_id=chat_id,
                             text=text,
                             reply_markup=keyboard,
                         )
-                        if result.get("ok"):
-                            media.message_id = result["result"]["message_id"]
-
-                except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
-                    result = await send_styled(
-                        chat_id=chat_id,
-                        text=text,
-                        reply_markup=keyboard,
-                    )
-                    if result.get("ok"):
-                        media.message_id = result["result"]["message_id"]
-
+                    media.message_id = sent.id
         except FileNotFoundError:
             await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             await self.play_next(chat_id)
@@ -144,14 +131,17 @@ class TgCall(PyTgCalls):
             await self.stop(chat_id)
             await message.edit_text(_lang["error_rtmp"])
 
+
     async def replay(self, chat_id: int) -> None:
         if not await db.get_call(chat_id):
             return
+
         media = queue.get_current(chat_id)
         _lang = await lang.get_lang(chat_id)
         msg = await app.send_message(chat_id=chat_id, text=_lang["play_again"])
         media.message_id = msg.id
         await self.play_media(chat_id, msg, media)
+
 
     async def play_next(self, chat_id: int) -> None:
         if loop := await db.get_loop(chat_id):
@@ -186,9 +176,11 @@ class TgCall(PyTgCalls):
         media.message_id = msg.id
         await self.play_media(chat_id, msg, media)
 
+
     async def ping(self) -> float:
         pings = [client.ping for client in self.clients]
         return round(sum(pings) / len(pings), 2)
+
 
     async def decorators(self, client: PyTgCalls) -> None:
         @client.on_update()
@@ -203,6 +195,7 @@ class TgCall(PyTgCalls):
                     types.ChatUpdate.Status.CLOSED_VOICE_CHAT,
                 ]:
                     await self.stop(update.chat_id)
+
 
     async def boot(self) -> None:
         PyTgCallsSession.notice_displayed = True
