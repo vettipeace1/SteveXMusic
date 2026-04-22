@@ -6,7 +6,7 @@ import asyncio
 from pyrogram import enums, filters, types
 
 from anony import app, config, db, lang
-from anony.helpers import utils
+from anony.helpers import utils, buttons
 from anony.helpers.styled_send import send_styled_video, send_styled, edit_styled
 
 
@@ -14,7 +14,6 @@ from anony.helpers.styled_send import send_styled_video, send_styled, edit_style
 @app.on_message(filters.command(["help"]) & filters.private & ~app.bl_users)
 @lang.language()
 async def _help(_, message: types.Message):
-    from anony import inline as buttons  # inline instance
     await send_styled_video(
         chat_id=message.chat.id,
         video=config.START_VDO,
@@ -28,7 +27,6 @@ async def _help(_, message: types.Message):
 @app.on_message(filters.command(["start"]))
 @lang.language()
 async def start(_, message: types.Message):
-    from anony import inline as buttons  # inline instance
 
     if message.from_user.id in app.bl_users and message.from_user.id not in db.notified:
         return await message.reply_text(message.lang["bl_user_notify"])
@@ -60,7 +58,7 @@ async def start(_, message: types.Message):
         # ── GROUP START ──
         _text = message.lang["start_gp"].format(app.name)
 
-        # Group layout — no colour needed here, plain kurigram is fine
+        # Group: no colour needed, plain kurigram is fine
         key = buttons.ikm(
             [
                 [buttons.ikb(text=message.lang["language"], callback_data="language")],
@@ -84,9 +82,7 @@ async def start(_, message: types.Message):
 @app.on_callback_query(filters.regex("^help$"))
 @lang.language()
 async def help_cb(_, query: types.CallbackQuery):
-    from anony import inline as buttons
     _lang = query.lang
-
     await edit_styled(
         chat_id=query.message.chat.id,
         message_id=query.message.id,
@@ -99,9 +95,7 @@ async def help_cb(_, query: types.CallbackQuery):
 @app.on_callback_query(filters.regex("^help (back|close)$"))
 @lang.language()
 async def help_back_close_cb(_, query: types.CallbackQuery):
-    from anony import inline as buttons
     action = query.data.split()[1]
-
     if action == "back":
         await edit_styled(
             chat_id=query.message.chat.id,
@@ -118,7 +112,6 @@ async def help_back_close_cb(_, query: types.CallbackQuery):
 @app.on_message(filters.command(["playmode", "settings"]) & filters.group & ~app.bl_users)
 @lang.language()
 async def settings(_, message: types.Message):
-    from anony import inline as buttons
 
     admin_only = await db.get_play_mode(message.chat.id)
     cmd_delete = await db.get_cmd_delete(message.chat.id)
