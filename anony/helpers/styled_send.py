@@ -1,4 +1,4 @@
-# anony/utils/styled_send.py
+# anony/helper/styled_send.py
 #
 # Sends messages/videos with coloured buttons via HTTP Bot API.
 # kurigram (MTProto) ignores style= — HTTP Bot API respects it.
