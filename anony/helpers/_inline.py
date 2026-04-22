@@ -2,16 +2,6 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  Colour rules (matching Jerry bot):
-#   1) Add me to your group  → 🔵 BLUE    (style="primary")   ← changed per request
-#   2) Help                  → 🟢 GREEN   (style="success")   ← changed per request
-#   3) Source                → 🔴 RED     (style="danger")
-#   4) All Back buttons      → 🟢 GREEN   (style="success")
-#   5) All Close buttons     → 🔴 RED     (style="danger")
-#   6) Timer during playing  → 🔴 RED     (style="danger")
-# ══════════════════════════════════════════════════════════════════════════════
-
 from pyrogram import types
 
 from anony import app, config, lang
@@ -19,9 +9,9 @@ from anony.core.lang import lang_codes
 
 
 def _ikb(text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
-    """Build a button and store style as plain attribute for styled_send to read."""
+    """Build button and store style as plain attribute for styled_send to read."""
     btn = types.InlineKeyboardButton(text=text, **kwargs)
-    btn.style = style  # read by styled_send._markup()
+    btn.style = style
     return btn
 
 
@@ -29,7 +19,7 @@ class Inline:
     def __init__(self):
         self.ikm = types.InlineKeyboardMarkup
 
-    # ── ikb exposed as method so start.py can call buttons.ikb(...) ──────────
+    # ── ikb as method — fixes: 'Inline' object has no attribute 'ikb' ────────
     def ikb(self, text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
         return _ikb(text, style=style, **kwargs)
 
@@ -50,7 +40,7 @@ class Inline:
                 [_ikb(status, callback_data=f"controls status {chat_id}")]
             )
         elif timer:
-            # Rule 6: Timer → 🔴 RED
+            # Timer → 🔴 RED
             keyboard.append(
                 [_ikb(timer, style="danger", callback_data=f"controls status {chat_id}")]
             )
@@ -79,24 +69,24 @@ class Inline:
             ]
         else:
             cbs = ["admins", "auth", "blist", "lang", "ping", "play", "queue", "stats", "sudo"]
-            buttons = [
+            btns = [
                 _ikb(_lang[f"help_{i}"], callback_data=f"help {cb}")
                 for i, cb in enumerate(cbs)
             ]
-            rows = [buttons[i : i + 3] for i in range(0, len(buttons), 3)]
+            rows = [btns[i : i + 3] for i in range(0, len(btns), 3)]
 
         return self.ikm(rows)
 
     def lang_markup(self, _lang: str) -> types.InlineKeyboardMarkup:
         langs = lang.get_languages()
-        buttons = [
+        btns = [
             _ikb(
                 f"{name} ({code}) {'✔️' if code == _lang else ''}",
                 callback_data=f"lang_change {code}",
             )
             for code, name in langs.items()
         ]
-        rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+        rows = [btns[i : i + 2] for i in range(0, len(btns), 2)]
         return self.ikm(rows)
 
     def ping_markup(self, text: str) -> types.InlineKeyboardMarkup:
@@ -141,14 +131,11 @@ class Inline:
         self, lang: dict, private: bool = False
     ) -> types.InlineKeyboardMarkup:
         rows = [
-            # Rule 1: Add me → 🔵 BLUE  (changed per request)
-            [_ikb(lang["add_me"],
-                  style="primary",
+            # Add me → 🔵 BLUE
+            [_ikb(lang["add_me"], style="primary",
                   url=f"https://t.me/{app.username}?startgroup=true")],
-            # Rule 2: Help → 🟢 GREEN  (changed per request)
-            [_ikb(lang["help"],
-                  style="success",
-                  callback_data="help")],
+            # Help → 🟢 GREEN
+            [_ikb(lang["help"], style="success", callback_data="help")],
             # Support + Channel → default
             [
                 _ikb(lang["support"], url=config.SUPPORT_CHAT),
@@ -157,12 +144,8 @@ class Inline:
         ]
 
         if private:
-            # Rule 3: Source → 🔴 RED
-            rows += [
-                [_ikb(lang["source"],
-                      style="danger",
-                      url="https://t.me/vettipeace")]
-            ]
+            # Source → 🔴 RED
+            rows += [[_ikb(lang["source"], style="danger", url="https://t.me/vettipeace")]]
         else:
             rows += [[_ikb(lang["language"], callback_data="language")]]
 
