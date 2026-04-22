@@ -41,8 +41,6 @@ async def _controls(_, query: types.CallbackQuery):
         return await query.answer()
     await query.answer(query.lang["processing"], show_alert=True)
 
-    status = None  # will hold the top-row label (red/green) for pause/resume
-
     if action == "pause":
         if not await db.playing(chat_id):
             return await query.answer(
@@ -55,8 +53,8 @@ async def _controls(_, query: types.CallbackQuery):
                 message_id=query.message.id,
                 reply_markup=buttons.queue_markup(chat_id, query.lang["paused"], False),
             )
-        status = query.lang["paused"]          # 🔴 red top row
-        reply  = query.lang["play_paused"].format(user)
+        status = query.lang["paused"]
+        reply = query.lang["play_paused"].format(user)
 
     elif action == "resume":
         if await db.playing(chat_id):
@@ -68,14 +66,12 @@ async def _controls(_, query: types.CallbackQuery):
                 message_id=query.message.id,
                 reply_markup=buttons.queue_markup(chat_id, query.lang["playing"], True),
             )
-        # FIX: set status so the message edit block runs AND top row shows green timer
-        status = query.lang["playing"]         # 🟢 green top row
-        reply  = query.lang["play_resumed"].format(user)
+        reply = query.lang["play_resumed"].format(user)
 
     elif action == "skip":
         await anon.play_next(chat_id)
         status = query.lang["skipped"]
-        reply  = query.lang["play_skipped"].format(user)
+        reply = query.lang["play_skipped"].format(user)
 
     elif action == "force":
         pos, media = queue.check_item(chat_id, args[3])
@@ -103,12 +99,12 @@ async def _controls(_, query: types.CallbackQuery):
         media.user = user
         await anon.replay(chat_id)
         status = query.lang["replayed"]
-        reply  = query.lang["play_replayed"].format(user)
+        reply = query.lang["play_replayed"].format(user)
 
     elif action == "stop":
         await anon.stop(chat_id)
         status = query.lang["stopped"]
-        reply  = query.lang["play_stopped"].format(user)
+        reply = query.lang["play_stopped"].format(user)
 
     try:
         if action in ["skip", "replay", "stop"]:
@@ -121,8 +117,9 @@ async def _controls(_, query: types.CallbackQuery):
                 query.message.caption.html or query.message.text.html,
                 flags=re.DOTALL,
             )
-            # FIX: for resume pass status (green) — was wrongly passing None before
-            keyboard = buttons.controls(chat_id, status=status)
+            keyboard = buttons.controls(
+                chat_id, status=status if action != "resume" else None
+            )
             await edit_text_styled(
                 chat_id=chat_id,
                 message_id=query.message.id,
