@@ -9,8 +9,8 @@ from anony.core.lang import lang_codes
 
 
 def _ikb(text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
-    btn = types.InlineKeyboardButton(text=text, **kwargs)
-    btn.style = style
+    button = types.InlineKeyboardButton(text=text, **kwargs)
+    button.style = style
     return btn
 
 
@@ -19,10 +19,10 @@ class Inline:
         self.ikm = types.InlineKeyboardMarkup
 
     def ikb(self, text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
-        return _ikb(text, style=style, **kwargs)
+        return self.ikb(text, style=style, **kwargs)
 
     def cancel_dl(self, text) -> types.InlineKeyboardMarkup:
-        return self.ikm([[_ikb(text, callback_data="cancel_dl")]])
+        return self.ikm([[self.ikb(text=text,  callback_data=f"cancel_dl")]])
 
     def controls(
         self,
@@ -36,22 +36,22 @@ class Inline:
         if status:
             # "Stream paused" → 🔴 RED
             keyboard.append(
-                [_ikb(status, style="danger", callback_data=f"controls status {chat_id}")]
+                [self.ikb(text=status, style="danger", callback_data=f"controls status {chat_id}")]
             )
         elif timer:
             # Timer counting → 🟢 GREEN
             keyboard.append(
-                [_ikb(timer, style="success", callback_data=f"controls status {chat_id}")]
+                [self.ikb(text=timer, style="success", callback_data=f"controls status {chat_id}")]
             )
 
         if not remove:
             keyboard.append(
                 [
-                    _ikb("▷",   callback_data=f"controls resume {chat_id}"),
-                    _ikb("II",  callback_data=f"controls pause {chat_id}"),
-                    _ikb("⥁",   callback_data=f"controls replay {chat_id}"),
-                    _ikb("‣‣I", callback_data=f"controls skip {chat_id}"),
-                    _ikb("▢",   callback_data=f"controls stop {chat_id}"),
+                    self.ikb("▷",   callback_data=f"controls resume {chat_id}"),
+                    self.ikb("II",  callback_data=f"controls pause {chat_id}"),
+                    self.ikb("⥁",   callback_data=f"controls replay {chat_id}"),
+                    self.ikb("‣‣I", callback_data=f"controls skip {chat_id}"),
+                    self.ikb("▢",   callback_data=f"controls stop {chat_id}"),
                 ]
             )
         return self.ikm(keyboard)
@@ -62,40 +62,46 @@ class Inline:
         if back:
             rows = [
                 [
-                    _ikb(_lang["back"],  style="success", callback_data="help back"),  # 🟢
-                    _ikb(_lang["close"], style="danger",  callback_data="help close"), # 🔴
+                    self.ikb(text=_lang["back"],  style="success", callback_data="help back"),  # 🟢
+                    self.ikb(text=_lang["close"], style="danger",  callback_data="help close"), # 🔴
                 ]
             ]
         else:
             cbs = ["admins", "auth", "blist", "lang", "ping", "play", "queue", "stats", "sudo"]
-            btns = [
-                _ikb(_lang[f"help_{i}"], callback_data=f"help {cb}")
+            buttons = [
+                self.ikb(text=_lang[f"help_{i}"], callback_data=f"help {cb}"
                 for i, cb in enumerate(cbs)
             ]
-            rows = [btns[i : i + 3] for i in range(0, len(btns), 3)]
+            rows = [buttons[i : i + 3] for i in range(0, len(buttons), 3)]
         return self.ikm(rows)
 
     def lang_markup(self, _lang: str) -> types.InlineKeyboardMarkup:
         langs = lang.get_languages()
-        btns = [
-            _ikb(
-                f"{name} ({code}) {'✔️' if code == _lang else ''}",
+        buttons = [
+            self.ikb(
+                text=f"{name} ({code}) {'✔️' if code == _lang else ''}",
                 callback_data=f"lang_change {code}",
             )
             for code, name in langs.items()
         ]
-        rows = [btns[i : i + 2] for i in range(0, len(btns), 2)]
+        rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
         return self.ikm(rows)
 
     def ping_markup(self, text: str) -> types.InlineKeyboardMarkup:
-        return self.ikm([[_ikb(text, url=config.SUPPORT_CHAT)]])
+        return self.ikm([[self.ikb(text=text, url=config.SUPPORT_CHAT)]])
 
-    def play_queued(
+        def play_queued(
         self, chat_id: int, item_id: str, _text: str
     ) -> types.InlineKeyboardMarkup:
-        # "Play Now" → 🔵 BLUE
         return self.ikm(
-            [[_ikb(_text, style="primary", callback_data=f"controls force {chat_id} {item_id}")]]
+            [
+                [
+                    self.ikb(
+                        text=_text,style="success"
+callback_data=f"controls force {chat_id} {item_id}"
+                    )
+                ]
+            ]
         )
 
     def queue_markup(
@@ -103,7 +109,7 @@ class Inline:
     ) -> types.InlineKeyboardMarkup:
         _action = "pause" if playing else "resume"
         return self.ikm(
-            [[_ikb(_text, callback_data=f"controls {_action} {chat_id} q")]]
+            [[self.ikb(text=_text, callback_data=f"controls {_action} {chat_id} q")]]
         )
 
     def settings_markup(
@@ -112,15 +118,15 @@ class Inline:
         return self.ikm(
             [
                 [
-                    _ikb(lang["play_mode"] + " ➜", callback_data="settings"),
-                    _ikb(admin_only, callback_data="settings play"),
+                    self.ikb(text=lang["play_mode"] + " ➜", callback_data="settings"),
+                    self.ikb(text=admin_only, callback_data="settings play"),
                 ],
                 [
-                    _ikb(lang["cmd_delete"] + " ➜", callback_data="settings"),
-                    _ikb(cmd_delete, callback_data="settings delete"),
+                    self.ikb(text=lang["cmd_delete"] + " ➜", callback_data="settings"),
+                    self.ikb(text=cmd_delete, callback_data="settings delete"),
                 ],
                 [
-                    _ikb(lang["language"] + " ➜", callback_data="settings"),
+                    self.ikb(text=lang["language"] + " ➜", callback_data="settings"),
                     _ikb(lang_codes[language], callback_data="language"),
                 ],
             ]
@@ -130,25 +136,25 @@ class Inline:
         self, lang: dict, private: bool = False
     ) -> types.InlineKeyboardMarkup:
         rows = [
-            [_ikb(lang["add_me"], style="primary",
+            [self.ikb(text=lang["add_me"], style="primary",
                   url=f"https://t.me/{app.username}?startgroup=true")],  # 🔵
-            [_ikb(lang["help"], style="success", callback_data="help")],  # 🟢
+            [self.ikb(text=lang["help"], style="success", callback_data="help")],  # 🟢
             [
-                _ikb(lang["support"], url=config.SUPPORT_CHAT),
-                _ikb(lang["channel"], url=config.SUPPORT_CHANNEL),
+                self.ikb(text=lang["support"], url=config.SUPPORT_CHAT),
+                self.ikb(text=lang["channel"], url=config.SUPPORT_CHANNEL),
             ],
         ]
         if private:
-            rows += [[_ikb(lang["source"], style="danger", url="https://t.me/vettipeace")]]  # 🔴
+            rows += [[self.ikb(text=lang["source"], style="danger", url="https://t.me/vettipeace")]]  # 🔴
         else:
-            rows += [[_ikb(lang["language"], callback_data="language")]]
+            rows += [[self.ikb(text=lang["language"], callback_data="language")]]
         return self.ikm(rows)
 
     def start_key_group(self, lang: dict) -> types.InlineKeyboardMarkup:
         return self.ikm(
             [
-                [_ikb(lang["help"], style="success", callback_data="help")],  # 🟢
-                [_ikb(lang["language"], callback_data="language")],
+                [self.ikb(text=lang["help"], style="success", callback_data="help")],  # 🟢
+                [self.ikb(text=lang["language"], callback_data="language")],
             ]
         )
 
@@ -156,8 +162,8 @@ class Inline:
         return self.ikm(
             [
                 [
-                    _ikb("❐", copy_text=link),
-                    _ikb("Youtube", url=link),
+                    self.ikb(text="❐", copy_text=link),
+                    self.ikb(text="Youtube", url=link),
                 ],
             ]
         )
