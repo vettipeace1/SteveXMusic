@@ -7,6 +7,7 @@ from pyrogram import filters, types
 
 from anony import anon, app, db, lang
 from anony.helpers import buttons, can_manage_vc
+from anony.helpers.styled_send import send_styled
 
 
 @app.on_message(filters.command(["pause"]) & filters.group & ~app.bl_users)
@@ -20,7 +21,12 @@ async def _pause(_, m: types.Message):
         return await m.reply_text(m.lang["play_already_paused"])
 
     await anon.pause(m.chat.id)
-    await m.reply_text(
+
+    # FIX: pass status= so controls() uses style="danger" → 🔴 RED button
+    # FIX: send via Bot API (send_styled) so style= is respected
+    await send_styled(
+        chat_id=m.chat.id,
         text=m.lang["play_paused"].format(m.from_user.mention),
-        reply_markup=buttons.controls(m.chat.id),
+        reply_markup=buttons.controls(m.chat.id, status=m.lang["paused"]),
+        reply_to_message_id=m.id,
     )
