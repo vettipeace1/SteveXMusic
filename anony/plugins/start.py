@@ -7,7 +7,7 @@ from pyrogram import enums, filters, types
 
 from anony import app, config, db, lang
 from anony.helpers import utils, buttons
-from anony.helpers.styled_send import send_styled_video, send_styled, edit_styled
+from anony.helpers.styled_send import send_styled_video, edit_styled
 
 
 # ─── HELP COMMAND (PM) ───
@@ -33,7 +33,6 @@ async def start(_, message: types.Message):
 
     private = message.chat.type == enums.ChatType.PRIVATE
 
-    # /start help support
     if len(message.command) > 1 and message.command[1] == "help":
         return await _help(_, message)
 
@@ -49,7 +48,6 @@ async def start(_, message: types.Message):
             reply_markup=buttons.start_key(message.lang, private=True),
             reply_to_message_id=message.id,
         )
-
         if not await db.is_user(message.from_user.id):
             await utils.send_log(message)
             await db.add_user(message.from_user.id)
@@ -58,21 +56,18 @@ async def start(_, message: types.Message):
         # ── GROUP START ──
         _text = message.lang["start_gp"].format(app.name)
 
-        # Group: no colour needed, plain kurigram is fine
         key = buttons.ikm(
             [
                 [buttons.ikb(text=message.lang["language"], callback_data="language")],
                 [buttons.ikb(text=message.lang["channel"],  url=config.SUPPORT_CHANNEL)],
             ]
         )
-
         await message.reply_video(
             video=config.START_VDO,
             caption=_text,
             reply_markup=key,
             quote=True,
         )
-
         if not await db.is_chat(message.chat.id):
             await utils.send_log(message, True)
             await db.add_chat(message.chat.id)
@@ -82,37 +77,37 @@ async def start(_, message: types.Message):
 @app.on_callback_query(filters.regex("^help$"))
 @lang.language()
 async def help_cb(_, query: types.CallbackQuery):
-    _lang = query.lang
     await edit_styled(
         chat_id=query.message.chat.id,
         message_id=query.message.id,
-        reply_markup=buttons.help_markup(_lang),
+        reply_markup=buttons.help_markup(query.lang),
     )
     await query.answer()
 
 
-# ─── HELP BACK / CLOSE CALLBACKS ───
-@app.on_callback_query(filters.regex("^help (back|close)$"))
+# ─── HELP BACK — shows help menu again with Back+Close coloured ───
+@app.on_callback_query(filters.regex("^help back$"))
 @lang.language()
-async def help_back_close_cb(_, query: types.CallbackQuery):
-    action = query.data.split()[1]
-    if action == "back":
-        await edit_styled(
-            chat_id=query.message.chat.id,
-            message_id=query.message.id,
-            reply_markup=buttons.help_markup(query.lang),
-        )
-        await query.answer()
-    elif action == "close":
-        await query.message.delete()
-        await query.answer()
+async def help_back_cb(_, query: types.CallbackQuery):
+    await edit_styled(
+        chat_id=query.message.chat.id,
+        message_id=query.message.id,
+        reply_markup=buttons.help_markup(query.lang, back=True),
+    )
+    await query.answer()
+
+
+# ─── HELP CLOSE — deletes the message ───
+@app.on_callback_query(filters.regex("^help close$"))
+async def help_close_cb(_, query: types.CallbackQuery):
+    await query.message.delete()
+    await query.answer()
 
 
 # ─── SETTINGS ───
 @app.on_message(filters.command(["playmode", "settings"]) & filters.group & ~app.bl_users)
 @lang.language()
 async def settings(_, message: types.Message):
-
     admin_only = await db.get_play_mode(message.chat.id)
     cmd_delete = await db.get_cmd_delete(message.chat.id)
     _language = await db.get_lang(message.chat.id)
@@ -130,7 +125,6 @@ async def settings(_, message: types.Message):
 @app.on_message(filters.new_chat_members, group=7)
 @lang.language()
 async def _new_member(_, message: types.Message):
-
     if message.chat.type != enums.ChatType.SUPERGROUP:
         return await message.chat.leave()
 
