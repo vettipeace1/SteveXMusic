@@ -1,8 +1,4 @@
 # anony/helpers/styled_send.py
-#
-# Sends messages with coloured buttons via HTTP Bot API.
-# kurigram (MTProto) ignores style= — HTTP Bot API respects it.
-# Uses your existing BOT_TOKEN — no new variable needed.
 
 import json
 import os
@@ -13,16 +9,13 @@ BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 
 def _markup(markup) -> str:
-    """Convert kurigram InlineKeyboardMarkup → HTTP Bot API JSON string."""
     rows = []
     for row in markup.inline_keyboard:
         btn_row = []
         for btn in row:
             d = {"text": btn.text}
-            # style= stored as plain attribute by _ikb() in _inline.py
             if getattr(btn, "style", None):
                 d["style"] = btn.style
-            # action — only one will be set
             if getattr(btn, "callback_data", None) is not None:
                 d["callback_data"] = btn.callback_data
             elif getattr(btn, "url", None):
@@ -44,7 +37,6 @@ async def send_styled_video(
     parse_mode: str = "html",
     reply_to_message_id: int = None,
 ) -> dict:
-    """Send a video with coloured buttons. Replaces message.reply_video()."""
     data = {
         "chat_id": chat_id,
         "video": video,
@@ -55,7 +47,6 @@ async def send_styled_video(
         data["reply_markup"] = _markup(reply_markup)
     if reply_to_message_id:
         data["reply_to_message_id"] = reply_to_message_id
-
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{BASE}/sendVideo", data=data) as resp:
             result = await resp.json()
@@ -71,7 +62,6 @@ async def send_styled(
     parse_mode: str = "html",
     reply_to_message_id: int = None,
 ) -> dict:
-    """Send a text message with coloured buttons. Replaces message.reply_text()."""
     data = {
         "chat_id": chat_id,
         "text": text,
@@ -82,7 +72,6 @@ async def send_styled(
         data["reply_markup"] = _markup(reply_markup)
     if reply_to_message_id:
         data["reply_to_message_id"] = reply_to_message_id
-
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{BASE}/sendMessage", data=data) as resp:
             result = await resp.json()
@@ -96,14 +85,12 @@ async def edit_styled(
     message_id: int,
     reply_markup=None,
 ) -> dict:
-    """Edit reply markup only with coloured buttons. Replaces message.edit_reply_markup()."""
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
     }
     if reply_markup:
         data["reply_markup"] = _markup(reply_markup)
-
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{BASE}/editMessageReplyMarkup", data=data) as resp:
             result = await resp.json()
@@ -119,7 +106,6 @@ async def edit_text_styled(
     reply_markup=None,
     parse_mode: str = "html",
 ) -> dict:
-    """Edit message text + coloured buttons. Replaces message.edit_text() with markup."""
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
@@ -129,7 +115,6 @@ async def edit_text_styled(
     }
     if reply_markup:
         data["reply_markup"] = _markup(reply_markup)
-
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{BASE}/editMessageText", data=data) as resp:
             result = await resp.json()
