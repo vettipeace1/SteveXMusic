@@ -1,6 +1,6 @@
 # anony/helpers/styled_send.py
 #
-# Sends messages/videos with coloured buttons via HTTP Bot API.
+# Sends messages/videos/photos with coloured buttons via HTTP Bot API.
 # kurigram (MTProto) ignores style= — HTTP Bot API respects it.
 # Uses your existing BOT_TOKEN — no new variable needed.
 
@@ -19,10 +19,8 @@ def _markup(markup) -> str:
         btn_row = []
         for btn in row:
             d = {"text": btn.text}
-            # style= stored as plain attribute by _ikb() in _inline.py
             if getattr(btn, "style", None):
                 d["style"] = btn.style
-            # action
             if getattr(btn, "callback_data", None) is not None:
                 d["callback_data"] = btn.callback_data
             elif getattr(btn, "url", None):
@@ -61,6 +59,34 @@ async def send_styled_video(
             result = await resp.json()
             if not result.get("ok"):
                 print(f"[styled_send] sendVideo error: {result}")
+            return result
+
+
+async def send_styled_photo(
+    chat_id: int,
+    photo: str,
+    caption: str,
+    reply_markup=None,
+    parse_mode: str = "html",
+    reply_to_message_id: int = None,
+) -> dict:
+    """Send a photo with coloured buttons. Replaces app.send_photo()."""
+    data = {
+        "chat_id": chat_id,
+        "photo": photo,
+        "caption": caption,
+        "parse_mode": parse_mode,
+    }
+    if reply_markup:
+        data["reply_markup"] = _markup(reply_markup)
+    if reply_to_message_id:
+        data["reply_to_message_id"] = reply_to_message_id
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{BASE}/sendPhoto", data=data) as resp:
+            result = await resp.json()
+            if not result.get("ok"):
+                print(f"[styled_send] sendPhoto error: {result}")
             return result
 
 
@@ -104,9 +130,7 @@ async def edit_styled(
 
     - If caption= given  → editMessageCaption  (for video/photo messages)
     - If text= given     → editMessageText     (for plain text messages)
-    - Otherwise          → editMessageReplyMarkup only (markup-only edit)
-
-    Always passes the styled reply_markup so colours are preserved.
+    - Otherwise          → editMessageReplyMarkup only
     """
     markup_json = _markup(reply_markup) if reply_markup else None
 
@@ -120,7 +144,6 @@ async def edit_styled(
     async with aiohttp.ClientSession() as session:
 
         if caption is not None:
-            # Video / photo message — edit caption + markup
             data = {**base_data, "caption": caption, "parse_mode": parse_mode}
             async with session.post(f"{BASE}/editMessageCaption", data=data) as resp:
                 result = await resp.json()
@@ -129,7 +152,6 @@ async def edit_styled(
                 return result
 
         elif text is not None:
-            # Plain text message — edit text + markup
             data = {
                 **base_data,
                 "text": text,
@@ -143,7 +165,6 @@ async def edit_styled(
                 return result
 
         else:
-            # Markup-only edit (no text change)
             async with session.post(f"{BASE}/editMessageReplyMarkup", data=base_data) as resp:
                 result = await resp.json()
                 if not result.get("ok"):
