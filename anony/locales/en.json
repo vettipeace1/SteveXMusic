@@ -148,13 +148,13 @@
     "stopped": "Stream ended",
     "source": "Source",
     "support": "Support",
-    "help_0": "Admins",
-    "help_1": "Auth",
-    "help_2": "Blacklist",
-    "help_3": "Language",
-    "help_4": "Ping",
-    "help_5": "Play",
-    "help_6": "Queue",
-    "help_7": "Stats",
-    "help_8": "Sudoers"
+    "help_admins": "Admins",
+    "help_auth": "Auth",
+    "help_blist": "Blacklist",
+    "help_lang": "Language",
+    "help_ping": "Ping",
+    "help_play": "Play",
+    "help_queue": "Queue",
+    "help_stats": "Stats",
+    "help_sudo": "Sudoers"
 }
