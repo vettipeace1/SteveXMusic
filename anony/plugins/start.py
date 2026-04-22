@@ -58,11 +58,11 @@ async def start(_, message: types.Message):
         # ── GROUP START ──
         _text = message.lang["start_gp"].format(app.name)
 
-        # FIX: use buttons.ikb() method and buttons.ikm class directly
+        # Group: no colour needed, plain kurigram is fine
         key = buttons.ikm(
             [
-                [buttons.ikb(message.lang["language"], callback_data="language")],
-                [buttons.ikb(message.lang["channel"],  url=config.SUPPORT_CHANNEL)],
+                [buttons.ikb(text=message.lang["language"], callback_data="language")],
+                [buttons.ikb(text=message.lang["channel"],  url=config.SUPPORT_CHANNEL)],
             ]
         )
 
@@ -79,17 +79,13 @@ async def start(_, message: types.Message):
 
 
 # ─── HELP BUTTON CLICK ───
-# Triggered when user taps the "Help" button on the start message
 @app.on_callback_query(filters.regex("^help$"))
 @lang.language()
 async def help_cb(_, query: types.CallbackQuery):
     _lang = query.lang
-    # FIX: pass caption= so edit goes to editMessageCaption (video message)
-    # This ensures style= colours are preserved on the buttons
     await edit_styled(
         chat_id=query.message.chat.id,
         message_id=query.message.id,
-        caption=_lang["help_menu"],
         reply_markup=buttons.help_markup(_lang),
     )
     await query.answer()
@@ -100,23 +96,15 @@ async def help_cb(_, query: types.CallbackQuery):
 @lang.language()
 async def help_back_close_cb(_, query: types.CallbackQuery):
     action = query.data.split()[1]
-
     if action == "back":
-        # FIX: pass caption= so colours work on the video message
         await edit_styled(
             chat_id=query.message.chat.id,
             message_id=query.message.id,
-            caption=query.lang["help_menu"],
             reply_markup=buttons.help_markup(query.lang),
         )
         await query.answer()
-
     elif action == "close":
-        try:
-            await query.message.delete()
-            await query.message.reply_to_message.delete()
-        except Exception:
-            pass
+        await query.message.delete()
         await query.answer()
 
 
