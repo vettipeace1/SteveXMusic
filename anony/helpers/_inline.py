@@ -4,13 +4,12 @@
 
 from pyrogram import types
 
+from anony import app, config, lang
 from anony.core.lang import lang_codes
-
-# app and config are imported lazily inside methods to avoid circular import:
-# anony/__init__.py → calls.py → helpers/__init__.py → _inline.py → anony (not loaded yet!)
 
 
 def _ikb(text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
+    """Build button and store style as plain attribute for styled_send to read."""
     btn = types.InlineKeyboardButton(text=text, **kwargs)
     btn.style = style
     return btn
@@ -20,6 +19,7 @@ class Inline:
     def __init__(self):
         self.ikm = types.InlineKeyboardMarkup
 
+    # ── ikb as method — fixes: 'Inline' object has no attribute 'ikb' ────────
     def ikb(self, text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
         return _ikb(text, style=style, **kwargs)
 
@@ -29,19 +29,22 @@ class Inline:
     def controls(
         self,
         chat_id: int,
-        status: str = None,   # paused text → 🔴 RED
-        timer: str = None,    # duration text → 🟢 GREEN
+        status: str = None,
+        timer: str = None,
         remove: bool = False,
     ) -> types.InlineKeyboardMarkup:
         keyboard = []
+
         if status:
             keyboard.append(
-                [_ikb(status, style="danger", callback_data=f"controls status {chat_id}")]
+                [_ikb(status, callback_data=f"controls status {chat_id}")]
             )
         elif timer:
+            # Timer → 🔴 RED
             keyboard.append(
-                [_ikb(timer, style="success", callback_data=f"controls status {chat_id}")]
+                [_ikb(timer, style="danger", callback_data=f"controls status {chat_id}")]
             )
+
         if not remove:
             keyboard.append(
                 [
@@ -60,8 +63,8 @@ class Inline:
         if back:
             rows = [
                 [
-                    _ikb(_lang["back"],  style="success", callback_data="help back"),  # 🟢 GREEN
-                    _ikb(_lang["close"], style="danger",  callback_data="help close"), # 🔴 RED
+                    _ikb(_lang["back"],  style="success", callback_data="help back"),   # 🟢 GREEN
+                    _ikb(_lang["close"], style="danger",  callback_data="help close"),  # 🔴 RED
                 ]
             ]
         else:
@@ -71,11 +74,11 @@ class Inline:
                 for i, cb in enumerate(cbs)
             ]
             rows = [btns[i : i + 3] for i in range(0, len(btns), 3)]
+
         return self.ikm(rows)
 
     def lang_markup(self, _lang: str) -> types.InlineKeyboardMarkup:
-        import anony
-        langs = anony.lang.get_languages()
+        langs = lang.get_languages()
         btns = [
             _ikb(
                 f"{name} ({code}) {'✔️' if code == _lang else ''}",
@@ -87,8 +90,7 @@ class Inline:
         return self.ikm(rows)
 
     def ping_markup(self, text: str) -> types.InlineKeyboardMarkup:
-        import anony
-        return self.ikm([[_ikb(text, url=anony.config.SUPPORT_CHAT)]])
+        return self.ikm([[_ikb(text, url=config.SUPPORT_CHAT)]])
 
     def play_queued(
         self, chat_id: int, item_id: str, _text: str
@@ -128,26 +130,31 @@ class Inline:
     def start_key(
         self, lang: dict, private: bool = False
     ) -> types.InlineKeyboardMarkup:
-        import anony
         rows = [
+            # Add me → 🔵 BLUE
             [_ikb(lang["add_me"], style="primary",
-                  url=f"https://t.me/{anony.app.username}?startgroup=true")],
+                  url=f"https://t.me/{app.username}?startgroup=true")],
+            # Help → 🟢 GREEN
             [_ikb(lang["help"], style="success", callback_data="help")],
+            # Support + Channel → default
             [
-                _ikb(lang["support"], url=anony.config.SUPPORT_CHAT),
-                _ikb(lang["channel"], url=anony.config.SUPPORT_CHANNEL),
+                _ikb(lang["support"], url=config.SUPPORT_CHAT),
+                _ikb(lang["channel"], url=config.SUPPORT_CHANNEL),
             ],
         ]
+
         if private:
+            # Source → 🔴 RED
             rows += [[_ikb(lang["source"], style="danger", url="https://t.me/vettipeace")]]
         else:
             rows += [[_ikb(lang["language"], callback_data="language")]]
+
         return self.ikm(rows)
 
     def start_key_group(self, lang: dict) -> types.InlineKeyboardMarkup:
         return self.ikm(
             [
-                [_ikb(lang["help"],     style="success", callback_data="help")],
+                [_ikb(lang["help"],     style="success", callback_data="help")],   # 🟢 GREEN
                 [_ikb(lang["language"], callback_data="language")],
             ]
         )
