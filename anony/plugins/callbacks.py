@@ -2,7 +2,6 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
-
 import re
 
 from pyrogram import errors, filters, types
@@ -49,8 +48,10 @@ async def _controls(_, query: types.CallbackQuery):
             )
         await anon.pause(chat_id)
         if qaction:
-            return await query.edit_message_reply_markup(
-                reply_markup=buttons.queue_markup(chat_id, query.lang["paused"], False)
+            return await edit_styled(
+                chat_id=chat_id,
+                message_id=query.message.id,
+                reply_markup=buttons.queue_markup(chat_id, query.lang["paused"], False),
             )
         status = query.lang["paused"]
         reply = query.lang["play_paused"].format(user)
@@ -60,8 +61,10 @@ async def _controls(_, query: types.CallbackQuery):
             return await query.answer(query.lang["play_not_paused"], show_alert=True)
         await anon.resume(chat_id)
         if qaction:
-            return await query.edit_message_reply_markup(
-                reply_markup=buttons.queue_markup(chat_id, query.lang["playing"], True)
+            return await edit_styled(
+                chat_id=chat_id,
+                message_id=query.message.id,
+                reply_markup=buttons.queue_markup(chat_id, query.lang["playing"], True),
             )
         reply = query.lang["play_resumed"].format(user)
 
@@ -117,36 +120,67 @@ async def _controls(_, query: types.CallbackQuery):
             keyboard = buttons.controls(
                 chat_id, status=status if action != "resume" else None
             )
-        await query.edit_message_text(
-            f"{mtext}\n\n<blockquote>{reply}</blockquote>", reply_markup=keyboard
-        )
+            await edit_text_styled(
+                chat_id=chat_id,
+                message_id=query.message.id,
+                text=f"{mtext}\n\n<blockquote>{reply}</blockquote>",
+                reply_markup=keyboard,
+            )
     except Exception:
         pass
 
 
-@app.on_callback_query(filters.regex("help") & ~app.bl_users)
+# ══════════════════════════════════════════════════════════════════
+#  ALL help callbacks handled HERE only — not in start.py
+#  Order matters: most specific regex first
+# ══════════════════════════════════════════════════════════════════
+
+@app.on_callback_query(filters.regex("^help back$") & ~app.bl_users)
 @lang.language()
-async def _help(_, query: types.CallbackQuery):
-    data = query.data.split()
-    if len(data) == 1:
-        return await query.answer(url=f"https://t.me/{app.username}?start=help")
-
-    if data[1] == "back":
-        return await query.edit_message_text(
-            text=query.lang["help_menu"], reply_markup=buttons.help_markup(query.lang)
-        )
-    elif data[1] == "close":
-        try:
-            await query.message.delete()
-            return await query.message.reply_to_message.delete()
-        except Exception:
-            return
-
-    await query.edit_message_text(
-        text=query.lang[f"help_{data[1]}"],
-        reply_markup=buttons.help_markup(query.lang, True),
+async def _help_back(_, query: types.CallbackQuery):
+    """Back → restore help_menu caption + main help buttons (no Back/Close)."""
+    await edit_caption_styled(
+        chat_id=query.message.chat.id,
+        message_id=query.message.id,
+        caption=query.lang["help_menu"],
+        reply_markup=buttons.help_markup(query.lang),   # main grid, no back/close
     )
+    await query.answer()
 
+
+@app.on_callback_query(filters.regex("^help close$") & ~app.bl_users)
+async def _help_close(_, query: types.CallbackQuery):
+    """Close → delete the message."""
+    try:
+        await query.message.delete()
+        await query.message.reply_to_message.delete()
+    except Exception:
+        pass
+    await query.answer()
+
+
+@app.on_callback_query(filters.regex("^help$") & ~app.bl_users)
+@lang.language()
+async def _help_btn(_, query: types.CallbackQuery):
+    """Help button from start message → open in PM."""
+    await query.answer(url=f"https://t.me/{app.username}?start=help")
+
+
+@app.on_callback_query(filters.regex("^help ") & ~app.bl_users)
+@lang.language()
+async def _help_submenu(_, query: types.CallbackQuery):
+    """Help submenu (admins, auth, blist, etc.) → show text + Back🟢 Close🔴."""
+    section = query.data.split()[1]   # e.g. "admins"
+    await edit_caption_styled(
+        chat_id=query.message.chat.id,
+        message_id=query.message.id,
+        caption=query.lang[f"help_{section}"],
+        reply_markup=buttons.help_markup(query.lang, True),  # back=True → Back+Close
+    )
+    await query.answer()
+
+
+# ══════════════════════════════════════════════════════════════════
 
 @app.on_callback_query(filters.regex("settings") & ~app.bl_users)
 @lang.language()
@@ -168,6 +202,7 @@ async def _settings_cb(_, query: types.CallbackQuery):
     elif cmd[1] == "play":
         await db.set_play_mode(chat_id, _admin)
         _admin = not _admin
+
     await query.edit_message_reply_markup(
         reply_markup=buttons.settings_markup(
             query.lang,
