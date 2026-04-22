@@ -9,6 +9,7 @@ from pyrogram import errors, filters, types
 
 from anony import anon, app, db, lang, queue, tg, yt
 from anony.helpers import admin_check, buttons, can_manage_vc
+from anony.helpers.styled_send import edit_styled, edit_caption_styled, edit_text_styled
 
 
 @app.on_callback_query(filters.regex("cancel_dl") & ~app.bl_users)
