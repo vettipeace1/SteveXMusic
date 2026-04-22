@@ -2,10 +2,17 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
+import re
+
 from pyrogram import types
 
 from anony import app, config, lang
 from anony.core.lang import lang_codes
+
+
+def _strip_html(text: str) -> str:
+    """Remove HTML tags from a string (for use in button labels)."""
+    return re.sub(r"<[^>]+>", "", text).strip()
 
 
 def _ikb(text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
@@ -69,7 +76,7 @@ class Inline:
         else:
             cbs = ["admins", "auth", "blist", "lang", "ping", "play", "queue", "stats", "sudo"]
             btns = [
-                _ikb(_lang[f"help_{cb}"], callback_data=f"help {cb}")  # ✅ FIXED: use cb not i
+                _ikb(_strip_html(_lang[f"help_{cb}"]), callback_data=f"help {cb}")
                 for cb in cbs
             ]
             rows = [btns[i : i + 3] for i in range(0, len(btns), 3)]
