@@ -7,7 +7,6 @@ from pyrogram import filters, types
 
 from anony import app, config, db, lang, queue, thumb
 from anony.helpers import Track, buttons
-from anony.helpers.styled_send import edit_text_styled
 
 
 @app.on_message(filters.command(["queue", "playing"]) & filters.group & ~app.bl_users)
