@@ -22,8 +22,8 @@ async def _pause(_, m: types.Message):
 
     await anon.pause(m.chat.id)
 
-    # FIX: pass status= so controls() uses style="danger" → 🔴 RED button
-    # FIX: send via Bot API (send_styled) so style= is respected
+    # 🔴 RED paused button — status= triggers style="danger" in controls()
+    # send_styled uses Bot API so style= colour is respected
     await send_styled(
         chat_id=m.chat.id,
         text=m.lang["play_paused"].format(m.from_user.mention),
