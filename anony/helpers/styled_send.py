@@ -95,18 +95,57 @@ async def edit_styled(
     chat_id: int,
     message_id: int,
     reply_markup=None,
+    caption: str = None,
+    text: str = None,
+    parse_mode: str = "html",
 ) -> dict:
-    """Edit reply markup only. Replaces message.edit_reply_markup()."""
-    data = {
+    """
+    Edit an existing message with coloured buttons.
+
+    - If caption= given  → editMessageCaption  (for video/photo messages)
+    - If text= given     → editMessageText     (for plain text messages)
+    - Otherwise          → editMessageReplyMarkup only (markup-only edit)
+
+    Always passes the styled reply_markup so colours are preserved.
+    """
+    markup_json = _markup(reply_markup) if reply_markup else None
+
+    base_data = {
         "chat_id": chat_id,
         "message_id": message_id,
     }
-    if reply_markup:
-        data["reply_markup"] = _markup(reply_markup)
+    if markup_json:
+        base_data["reply_markup"] = markup_json
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(f"{BASE}/editMessageReplyMarkup", data=data) as resp:
-            result = await resp.json()
-            if not result.get("ok"):
-                print(f"[styled_send] editMarkup error: {result}")
-            return result
+
+        if caption is not None:
+            # Video / photo message — edit caption + markup
+            data = {**base_data, "caption": caption, "parse_mode": parse_mode}
+            async with session.post(f"{BASE}/editMessageCaption", data=data) as resp:
+                result = await resp.json()
+                if not result.get("ok"):
+                    print(f"[styled_send] editMessageCaption error: {result}")
+                return result
+
+        elif text is not None:
+            # Plain text message — edit text + markup
+            data = {
+                **base_data,
+                "text": text,
+                "parse_mode": parse_mode,
+                "disable_web_page_preview": True,
+            }
+            async with session.post(f"{BASE}/editMessageText", data=data) as resp:
+                result = await resp.json()
+                if not result.get("ok"):
+                    print(f"[styled_send] editMessageText error: {result}")
+                return result
+
+        else:
+            # Markup-only edit (no text change)
+            async with session.post(f"{BASE}/editMessageReplyMarkup", data=base_data) as resp:
+                result = await resp.json()
+                if not result.get("ok"):
+                    print(f"[styled_send] editMessageReplyMarkup error: {result}")
+                return result
