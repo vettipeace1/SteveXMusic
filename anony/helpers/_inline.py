@@ -3,22 +3,9 @@
 # This file is part of AnonXMusic
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  HOW COLOUR BUTTONS WORK IN THIS SETUP
-#  ─────────────────────────────────────
-#  kurigram (MTProto) does not yet support Bot API 9.4 style= field.
-#  So we:
-#    1. Store style as a plain Python attribute on each button object here.
-#    2. Use anony/utils/styled_send.py to send/edit messages that need colours.
-#       That helper sends directly to Telegram's HTTP Bot API, which supports style=.
-#
-#  Bot API 9.4 style values:
-#    style="primary"  →  🔵 BLUE
-#    style="success"  →  🟢 GREEN
-#    style="danger"   →  🔴 RED
-#
-#  Colour rules:
-#   1) Add me to your group  → 🟢 GREEN   (style="success")
-#   2) Help                  → 🔵 BLUE    (style="primary")
+#  Colour rules (matching Jerry bot):
+#   1) Add me to your group  → 🔵 BLUE    (style="primary")   ← changed per request
+#   2) Help                  → 🟢 GREEN   (style="success")   ← changed per request
 #   3) Source                → 🔴 RED     (style="danger")
 #   4) All Back buttons      → 🟢 GREEN   (style="success")
 #   5) All Close buttons     → 🔴 RED     (style="danger")
@@ -31,19 +18,20 @@ from anony import app, config, lang
 from anony.core.lang import lang_codes
 
 
-# ── Safe button builder ───────────────────────────────────────────────────────
-# Creates an InlineKeyboardButton and stores style as a plain Python attribute.
-# styled_send.py reads btn.style when building the HTTP payload for colours.
-
 def _ikb(text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
+    """Build a button and store style as plain attribute for styled_send to read."""
     btn = types.InlineKeyboardButton(text=text, **kwargs)
-    btn.style = style  # plain attribute — not sent by kurigram, read by styled_send.py
+    btn.style = style  # read by styled_send._markup()
     return btn
 
 
 class Inline:
     def __init__(self):
         self.ikm = types.InlineKeyboardMarkup
+
+    # ── ikb exposed as method so start.py can call buttons.ikb(...) ──────────
+    def ikb(self, text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
+        return _ikb(text, style=style, **kwargs)
 
     def cancel_dl(self, text) -> types.InlineKeyboardMarkup:
         return self.ikm([[_ikb(text, callback_data="cancel_dl")]])
@@ -85,8 +73,8 @@ class Inline:
         if back:
             rows = [
                 [
-                    _ikb(_lang["back"],  style="success", callback_data="help back"),   # Rule 4: 🟢
-                    _ikb(_lang["close"], style="danger",  callback_data="help close"),  # Rule 5: 🔴
+                    _ikb(_lang["back"],  style="success", callback_data="help back"),   # 🟢 GREEN
+                    _ikb(_lang["close"], style="danger",  callback_data="help close"),  # 🔴 RED
                 ]
             ]
         else:
@@ -153,13 +141,13 @@ class Inline:
         self, lang: dict, private: bool = False
     ) -> types.InlineKeyboardMarkup:
         rows = [
-            # Rule 1: Add me → 🟢 GREEN
+            # Rule 1: Add me → 🔵 BLUE  (changed per request)
             [_ikb(lang["add_me"],
-                  style="success",
-                  url=f"https://t.me/{app.username}?startgroup=true")],
-            # Rule 2: Help → 🔵 BLUE
-            [_ikb(lang["help"],
                   style="primary",
+                  url=f"https://t.me/{app.username}?startgroup=true")],
+            # Rule 2: Help → 🟢 GREEN  (changed per request)
+            [_ikb(lang["help"],
+                  style="success",
                   callback_data="help")],
             # Support + Channel → default
             [
@@ -183,7 +171,7 @@ class Inline:
     def start_key_group(self, lang: dict) -> types.InlineKeyboardMarkup:
         return self.ikm(
             [
-                [_ikb(lang["help"],     style="primary", callback_data="help")],
+                [_ikb(lang["help"],     style="success", callback_data="help")],   # 🟢 GREEN
                 [_ikb(lang["language"], callback_data="language")],
             ]
         )
