@@ -8,7 +8,7 @@ from pyrogram import errors, filters, types
 
 from anony import anon, app, db, lang, queue, tg, yt
 from anony.helpers import admin_check, buttons, can_manage_vc
-from anony.helpers.styled_send import edit_styled, edit_text_styled
+from anony.helpers.styled_send import edit_styled, edit_caption_styled, edit_text_styled
 
 
 @app.on_callback_query(filters.regex("cancel_dl") & ~app.bl_users)
@@ -48,7 +48,6 @@ async def _controls(_, query: types.CallbackQuery):
             )
         await anon.pause(chat_id)
         if qaction:
-            # 🔴 RED — paused state in queue
             return await edit_styled(
                 chat_id=chat_id,
                 message_id=query.message.id,
@@ -62,7 +61,6 @@ async def _controls(_, query: types.CallbackQuery):
             return await query.answer(query.lang["play_not_paused"], show_alert=True)
         await anon.resume(chat_id)
         if qaction:
-            # 🟢 GREEN — playing state in queue
             return await edit_styled(
                 chat_id=chat_id,
                 message_id=query.message.id,
@@ -122,7 +120,7 @@ async def _controls(_, query: types.CallbackQuery):
             keyboard = buttons.controls(
                 chat_id, status=status if action != "resume" else None
             )
-            # Use HTTP Bot API so status button colour (🔴 paused) actually shows
+            # Controls message is a plain text message — use edit_text_styled
             await edit_text_styled(
                 chat_id=chat_id,
                 message_id=query.message.id,
@@ -137,31 +135,40 @@ async def _controls(_, query: types.CallbackQuery):
 @lang.language()
 async def _help(_, query: types.CallbackQuery):
     data = query.data.split()
+
+    # "help" alone → redirect to PM /start help
     if len(data) == 1:
         return await query.answer(url=f"https://t.me/{app.username}?start=help")
 
+    msg = query.message
+
     if data[1] == "back":
-        # 🟢 GREEN Back, 🔴 RED Close — via HTTP Bot API so colours show
-        return await edit_text_styled(
-            chat_id=query.message.chat.id,
-            message_id=query.message.id,
-            text=query.lang["help_menu"],
+        # Going back to help menu — only update the markup (Back/Close buttons coloured)
+        # Use edit_styled (markup only) because we don't want to change the video caption
+        await edit_styled(
+            chat_id=msg.chat.id,
+            message_id=msg.id,
             reply_markup=buttons.help_markup(query.lang),
         )
+        return await query.answer()
+
     elif data[1] == "close":
         try:
-            await query.message.delete()
-            return await query.message.reply_to_message.delete()
+            await msg.delete()
+            await msg.reply_to_message.delete()
         except Exception:
-            return
+            pass
+        return
 
-    # Help submenu — show Back+Close with colours
-    await edit_text_styled(
-        chat_id=query.message.chat.id,
-        message_id=query.message.id,
-        text=query.lang[f"help_{data[1]}"],
+    # Help submenu (admins, auth, blist, etc.)
+    # The message is a VIDEO — use edit_caption_styled to change caption + show Back/Close coloured
+    await edit_caption_styled(
+        chat_id=msg.chat.id,
+        message_id=msg.id,
+        caption=query.lang[f"help_{data[1]}"],
         reply_markup=buttons.help_markup(query.lang, True),
     )
+    await query.answer()
 
 
 @app.on_callback_query(filters.regex("settings") & ~app.bl_users)
