@@ -2,6 +2,17 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  Colour rules:
+#   play_queued "Play Now"   → 🔵 BLUE    (style="primary")
+#   Back buttons             → 🟢 GREEN   (style="success")
+#   Close buttons            → 🔴 RED     (style="danger")
+#   Stream paused / Timer    → 🔴 RED     (style="danger")
+#   Add me to your group     → 🔵 BLUE    (style="primary")
+#   Help                     → 🟢 GREEN   (style="success")
+#   Source                   → 🔴 RED     (style="danger")
+# ══════════════════════════════════════════════════════════════════════════════
+
 from pyrogram import types
 
 from anony import app, config, lang
@@ -19,7 +30,6 @@ class Inline:
     def __init__(self):
         self.ikm = types.InlineKeyboardMarkup
 
-    # ── ikb as method — fixes: 'Inline' object has no attribute 'ikb' ────────
     def ikb(self, text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
         return _ikb(text, style=style, **kwargs)
 
@@ -36,13 +46,14 @@ class Inline:
         keyboard = []
 
         if status:
+            # "Stream paused" → 🔴 RED
             keyboard.append(
-                [_ikb(status, callback_data=f"controls status {chat_id}")]
+                [_ikb(status, style="danger", callback_data=f"controls status {chat_id}")]
             )
         elif timer:
-            # Timer → 🔴 RED
+            # Timer counting → 🟢 GREEN (like Jerry)
             keyboard.append(
-                [_ikb(timer, style="danger", callback_data=f"controls status {chat_id}")]
+                [_ikb(timer, style="success", callback_data=f"controls status {chat_id}")]
             )
 
         if not remove:
@@ -95,8 +106,9 @@ class Inline:
     def play_queued(
         self, chat_id: int, item_id: str, _text: str
     ) -> types.InlineKeyboardMarkup:
+        # "Play Now" → 🔵 BLUE (like Jerry)
         return self.ikm(
-            [[_ikb(_text, callback_data=f"controls force {chat_id} {item_id}")]]
+            [[_ikb(_text, style="primary", callback_data=f"controls force {chat_id} {item_id}")]]
         )
 
     def queue_markup(
@@ -154,7 +166,7 @@ class Inline:
     def start_key_group(self, lang: dict) -> types.InlineKeyboardMarkup:
         return self.ikm(
             [
-                [_ikb(lang["help"],     style="success", callback_data="help")],   # 🟢 GREEN
+                [_ikb(lang["help"],     style="success", callback_data="help")],  # 🟢 GREEN
                 [_ikb(lang["language"], callback_data="language")],
             ]
         )
