@@ -2,7 +2,7 @@
 #
 # Sends messages/videos with coloured buttons via HTTP Bot API.
 # kurigram (MTProto) ignores style= — HTTP Bot API respects it.
-# Uses your existing BOT_TOKEN from .env — no new variable needed.
+# Uses your existing BOT_TOKEN — no new variable needed.
 
 import json
 import os
@@ -19,7 +19,7 @@ def _markup(markup) -> str:
         btn_row = []
         for btn in row:
             d = {"text": btn.text}
-            # style= colour stored as plain attribute by _ikb() in inline.py
+            # style= stored as plain attribute by _ikb() in _inline.py
             if getattr(btn, "style", None):
                 d["style"] = btn.style
             # action
