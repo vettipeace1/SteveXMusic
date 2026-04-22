@@ -14,6 +14,7 @@ from pytgcalls.pytgcalls_session import PyTgCallsSession
 from anony import (app, config, db, lang, logger,
                    queue, thumb, userbot, yt)
 from anony.helpers import Media, Track, buttons
+from anony.helpers.styled_send import send_styled, send_styled_photo
 
 
 class TgCall(PyTgCalls):
@@ -88,33 +89,51 @@ class TgCall(PyTgCalls):
                     media.duration,
                     media.user,
                 )
-                keyboard = buttons.controls(chat_id)
+
+                # ── timer button = 🟢 GREEN (pass timer= so controls() uses success style)
+                keyboard = buttons.controls(chat_id, timer=media.duration)
+
                 try:
                     if _thumb:
-                        await message.edit_media(
-                            media=InputMediaPhoto(
-                                media=_thumb,
-                                caption=text,
-                            ),
-                            reply_markup=keyboard,
-                        )
-                    else:
-                        await message.edit_text(text, reply_markup=keyboard)
-                except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
-                    if _thumb:
-                        sent = await app.send_photo(
+                        # Delete the old "searching/downloading" message first,
+                        # then send a NEW photo via Bot API so style= colours work.
+                        try:
+                            await message.delete()
+                        except Exception:
+                            pass
+                        result = await send_styled_photo(
                             chat_id=chat_id,
                             photo=_thumb,
                             caption=text,
                             reply_markup=keyboard,
                         )
+                        # Store new message id for later deletion
+                        if result.get("ok"):
+                            media.message_id = result["result"]["message_id"]
                     else:
-                        sent = await app.send_message(
+                        # Plain text — edit existing message via Bot API
+                        try:
+                            await message.delete()
+                        except Exception:
+                            pass
+                        result = await send_styled(
                             chat_id=chat_id,
                             text=text,
                             reply_markup=keyboard,
                         )
-                    media.message_id = sent.id
+                        if result.get("ok"):
+                            media.message_id = result["result"]["message_id"]
+
+                except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
+                    # Fallback: no photo, send plain text via Bot API
+                    result = await send_styled(
+                        chat_id=chat_id,
+                        text=text,
+                        reply_markup=keyboard,
+                    )
+                    if result.get("ok"):
+                        media.message_id = result["result"]["message_id"]
+
         except FileNotFoundError:
             await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             await self.play_next(chat_id)
