@@ -3,17 +3,18 @@
 # This file is part of AnonXMusic
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  REQUIRES: kurigram dev version (installed from GitHub, not PyPI stable)
-#  In requirements.txt use:
-#    https://github.com/KurimuzonAkuma/kurigram/archive/dev.zip
-#  instead of:
-#    kurigram>=2.2.21
+#  HOW COLOUR BUTTONS WORK IN THIS SETUP
+#  ─────────────────────────────────────
+#  kurigram (MTProto) does not yet support Bot API 9.4 style= field.
+#  So we:
+#    1. Store style as a plain Python attribute on each button object here.
+#    2. Use anony/utils/styled_send.py to send/edit messages that need colours.
+#       That helper sends directly to Telegram's HTTP Bot API, which supports style=.
 #
-#  Bot API 9.4 button style values:
-#    style="primary"     →  🔵 BLUE
-#    style="success"     →  🟢 GREEN
-#    style="danger"      →  🔴 RED
-#    (no style)          →  default (desaturated navy blue)
+#  Bot API 9.4 style values:
+#    style="primary"  →  🔵 BLUE
+#    style="success"  →  🟢 GREEN
+#    style="danger"   →  🔴 RED
 #
 #  Colour rules:
 #   1) Add me to your group  → 🟢 GREEN   (style="success")
@@ -24,31 +25,20 @@
 #   6) Timer during playing  → 🔴 RED     (style="danger")
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ✅ FIX: Import from kurigram, NOT pyrogram.
-# The style= colour parameter only exists in kurigram dev.
-# Using "from pyrogram import types" will silently ignore style= and
-# buttons will always appear as the default grey/navy colour.
-try:
-    from kurigram import types
-except ImportError:
-    from pyrogram import types  # fallback (no colour support)
+from pyrogram import types
 
 from anony import app, config, lang
 from anony.core.lang import lang_codes
 
 
 # ── Safe button builder ───────────────────────────────────────────────────────
-# Tries style= first (works on kurigram dev).
-# If the installed version does not support style=, falls back silently
-# so the bot keeps running without colours rather than crashing.
+# Creates an InlineKeyboardButton and stores style as a plain Python attribute.
+# styled_send.py reads btn.style when building the HTTP payload for colours.
 
 def _ikb(text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
-    if style:
-        try:
-            return types.InlineKeyboardButton(text=text, style=style, **kwargs)
-        except TypeError:
-            pass  # older kurigram — just skip style
-    return types.InlineKeyboardButton(text=text, **kwargs)
+    btn = types.InlineKeyboardButton(text=text, **kwargs)
+    btn.style = style  # plain attribute — not sent by kurigram, read by styled_send.py
+    return btn
 
 
 class Inline:
@@ -68,7 +58,6 @@ class Inline:
         keyboard = []
 
         if status:
-            # Normal status → default colour
             keyboard.append(
                 [_ikb(status, callback_data=f"controls status {chat_id}")]
             )
@@ -187,12 +176,10 @@ class Inline:
                       url="https://t.me/vettipeace")]
             ]
         else:
-            # Language → default
             rows += [[_ikb(lang["language"], callback_data="language")]]
 
         return self.ikm(rows)
 
-    # Group /start: Help (🔵) + Language (default)
     def start_key_group(self, lang: dict) -> types.InlineKeyboardMarkup:
         return self.ikm(
             [
