@@ -1,6 +1,6 @@
 # anony/helpers/styled_send.py
 #
-# Sends messages/videos with coloured buttons via HTTP Bot API.
+# Sends messages with coloured buttons via HTTP Bot API.
 # kurigram (MTProto) ignores style= — HTTP Bot API respects it.
 # Uses your existing BOT_TOKEN — no new variable needed.
 
@@ -22,7 +22,7 @@ def _markup(markup) -> str:
             # style= stored as plain attribute by _ikb() in _inline.py
             if getattr(btn, "style", None):
                 d["style"] = btn.style
-            # action
+            # action — only one will be set
             if getattr(btn, "callback_data", None) is not None:
                 d["callback_data"] = btn.callback_data
             elif getattr(btn, "url", None):
@@ -96,7 +96,7 @@ async def edit_styled(
     message_id: int,
     reply_markup=None,
 ) -> dict:
-    """Edit reply markup only. Replaces message.edit_reply_markup()."""
+    """Edit reply markup only with coloured buttons. Replaces message.edit_reply_markup()."""
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
@@ -109,4 +109,30 @@ async def edit_styled(
             result = await resp.json()
             if not result.get("ok"):
                 print(f"[styled_send] editMarkup error: {result}")
+            return result
+
+
+async def edit_text_styled(
+    chat_id: int,
+    message_id: int,
+    text: str,
+    reply_markup=None,
+    parse_mode: str = "html",
+) -> dict:
+    """Edit message text + coloured buttons. Replaces message.edit_text() with markup."""
+    data = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": True,
+    }
+    if reply_markup:
+        data["reply_markup"] = _markup(reply_markup)
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{BASE}/editMessageText", data=data) as resp:
+            result = await resp.json()
+            if not result.get("ok"):
+                print(f"[styled_send] editText error: {result}")
             return result
