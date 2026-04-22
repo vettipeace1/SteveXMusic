@@ -2,13 +2,13 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
+
 import re
 
 from pyrogram import errors, filters, types
 
 from anony import anon, app, db, lang, queue, tg, yt
 from anony.helpers import admin_check, buttons, can_manage_vc
-from anony.helpers.styled_send import edit_styled, edit_caption_styled, edit_text_styled
 
 
 @app.on_callback_query(filters.regex("cancel_dl") & ~app.bl_users)
@@ -48,10 +48,8 @@ async def _controls(_, query: types.CallbackQuery):
             )
         await anon.pause(chat_id)
         if qaction:
-            return await edit_styled(
-                chat_id=chat_id,
-                message_id=query.message.id,
-                reply_markup=buttons.queue_markup(chat_id, query.lang["paused"], False),
+            return await query.edit_message_reply_markup(
+                reply_markup=buttons.queue_markup(chat_id, query.lang["paused"], False)
             )
         status = query.lang["paused"]
         reply = query.lang["play_paused"].format(user)
@@ -61,10 +59,8 @@ async def _controls(_, query: types.CallbackQuery):
             return await query.answer(query.lang["play_not_paused"], show_alert=True)
         await anon.resume(chat_id)
         if qaction:
-            return await edit_styled(
-                chat_id=chat_id,
-                message_id=query.message.id,
-                reply_markup=buttons.queue_markup(chat_id, query.lang["playing"], True),
+            return await query.edit_message_reply_markup(
+                reply_markup=buttons.queue_markup(chat_id, query.lang["playing"], True)
             )
         reply = query.lang["play_resumed"].format(user)
 
@@ -120,53 +116,35 @@ async def _controls(_, query: types.CallbackQuery):
             keyboard = buttons.controls(
                 chat_id, status=status if action != "resume" else None
             )
-            await edit_text_styled(
-                chat_id=chat_id,
-                message_id=query.message.id,
-                text=f"{mtext}\n\n<blockquote>{reply}</blockquote>",
-                reply_markup=keyboard,
-            )
+        await query.edit_message_text(
+            f"{mtext}\n\n<blockquote>{reply}</blockquote>", reply_markup=keyboard
+        )
     except Exception:
         pass
 
 
-@app.on_callback_query(filters.regex("^help") & ~app.bl_users)
+@app.on_callback_query(filters.regex("help") & ~app.bl_users)
 @lang.language()
 async def _help(_, query: types.CallbackQuery):
     data = query.data.split()
-    msg = query.message
-
-    # "help" alone → redirect to PM
     if len(data) == 1:
         return await query.answer(url=f"https://t.me/{app.username}?start=help")
 
     if data[1] == "back":
-        # ✅ Restore the original help_menu caption AND show the main help buttons
-        # Must use edit_caption_styled because message is a VIDEO
-        await edit_caption_styled(
-            chat_id=msg.chat.id,
-            message_id=msg.id,
-            caption=query.lang["help_menu"],
-            reply_markup=buttons.help_markup(query.lang),
+        return await query.edit_message_text(
+            text=query.lang["help_menu"], reply_markup=buttons.help_markup(query.lang)
         )
-        return await query.answer()
-
     elif data[1] == "close":
         try:
-            await msg.delete()
-            await msg.reply_to_message.delete()
+            await query.message.delete()
+            return await query.message.reply_to_message.delete()
         except Exception:
-            pass
-        return
+            return
 
-    # Help submenu — change caption to submenu text, show Back🟢 + Close🔴
-    await edit_caption_styled(
-        chat_id=msg.chat.id,
-        message_id=msg.id,
-        caption=query.lang[f"help_{data[1]}"],
+    await query.edit_message_text(
+        text=query.lang[f"help_{data[1]}"],
         reply_markup=buttons.help_markup(query.lang, True),
     )
-    await query.answer()
 
 
 @app.on_callback_query(filters.regex("settings") & ~app.bl_users)
@@ -189,7 +167,6 @@ async def _settings_cb(_, query: types.CallbackQuery):
     elif cmd[1] == "play":
         await db.set_play_mode(chat_id, _admin)
         _admin = not _admin
-
     await query.edit_message_reply_markup(
         reply_markup=buttons.settings_markup(
             query.lang,
