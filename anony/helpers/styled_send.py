@@ -11,21 +11,21 @@ BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 def _markup(markup) -> str:
     rows = []
     for row in markup.inline_keyboard:
-        btn_row = []
-        for btn in row:
-            d = {"text": btn.text}
-            if getattr(btn, "style", None):
-                d["style"] = btn.style
-            if getattr(btn, "callback_data", None) is not None:
-                d["callback_data"] = btn.callback_data
-            elif getattr(btn, "url", None):
-                d["url"] = btn.url
-            elif getattr(btn, "switch_inline_query", None) is not None:
-                d["switch_inline_query"] = btn.switch_inline_query
-            elif getattr(btn, "switch_inline_query_current_chat", None) is not None:
-                d["switch_inline_query_current_chat"] = btn.switch_inline_query_current_chat
-            btn_row.append(d)
-        rows.append(btn_row)
+        button_row = []
+        for buttonn in row:
+            d = {"text": button.text}
+            if getattr(button, "style", None):
+                d["style"] = button.style
+            if getattr(button, "callback_data", None) is not None:
+                d["callback_data"] = button.callback_data
+            elif getattr(button, "url", None):
+                d["url"] = button.url
+            elif getattr(button, "switch_inline_query", None) is not None:
+                d["switch_inline_query"] = button.switch_inline_query
+            elif getattr(button, "switch_inline_query_current_chat", None) is not None:
+                d["switch_inline_query_current_chat"] = button.switch_inline_query_current_chat
+            button_row.append(d)
+        rows.append(button_row)
     return json.dumps({"inline_keyboard": rows})
 
 
