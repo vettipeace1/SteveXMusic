@@ -17,7 +17,6 @@ from pyrogram import types
 
 from anony import app, config, lang
 from anony.core.lang import lang_codes
-from anony.helpers.styled_send import edit_text_styled
 
 
 def _ikb(text: str, *, style: str = None, **kwargs) -> types.InlineKeyboardButton:
