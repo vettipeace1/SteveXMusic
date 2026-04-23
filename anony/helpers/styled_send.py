@@ -7,6 +7,16 @@ import aiohttp
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# 🔥 reuse session (important for performance)
+_session: aiohttp.ClientSession | None = None
+
+
+async def _get_session():
+    global _session
+    if _session is None or _session.closed:
+        _session = aiohttp.ClientSession()
+    return _session
+
 
 def _markup(markup) -> str:
     rows = []
@@ -17,6 +27,7 @@ def _markup(markup) -> str:
         for btn in row:
             d = {"text": btn.text}
 
+            # ✅ STYLE SUPPORT
             if getattr(btn, "style", None):
                 d["style"] = btn.style
 
@@ -36,37 +47,38 @@ def _markup(markup) -> str:
     return json.dumps({"inline_keyboard": rows})
 
 
-async def send_styled_video(
-    chat_id: int,
-    video: str,
-    caption: str,
-    reply_markup=None,
-    parse_mode: str = "html",
-    reply_to_message_id: int = None,
-) -> dict:
+# ─────────────────────────────────────────────
+# 🔥 CORE REQUEST HANDLER (handles all errors)
+# ─────────────────────────────────────────────
 
-    data = {
-        "chat_id": chat_id,
-        "video": video,
-        "caption": caption,
-        "parse_mode": parse_mode,
-    }
+async def _post(method: str, data: dict) -> dict:
+    session = await _get_session()
 
-    if reply_markup:
-        data["reply_markup"] = _markup(reply_markup)
-
-    if reply_to_message_id:
-        data["reply_to_message_id"] = reply_to_message_id
-
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{BASE}/sendVideo", data=data) as resp:
+    try:
+        async with session.post(f"{BASE}/{method}", data=data) as resp:
             result = await resp.json()
 
             if not result.get("ok"):
-                print(f"[styled_send] sendVideo error: {result}")
+                desc = result.get("description", "")
+
+                # ✅ IGNORE SAFE ERRORS
+                if "message is not modified" in desc:
+                    return result
+                if "query is too old" in desc:
+                    return result
+
+                print(f"[styled_send] {method} error:", result)
 
             return result
 
+    except Exception as e:
+        print(f"[styled_send] {method} exception:", e)
+        return {"ok": False}
+
+
+# ─────────────────────────────────────────────
+# SEND FUNCTIONS
+# ─────────────────────────────────────────────
 
 async def send_styled(
     chat_id: int,
@@ -89,15 +101,54 @@ async def send_styled(
     if reply_to_message_id:
         data["reply_to_message_id"] = reply_to_message_id
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{BASE}/sendMessage", data=data) as resp:
-            result = await resp.json()
+    return await _post("sendMessage", data)
 
-            if not result.get("ok"):
-                print(f"[styled_send] sendMessage error: {result}")
 
-            return result
+async def send_styled_photo(
+    chat_id: int,
+    photo: str,
+    caption: str,
+    reply_markup=None,
+    parse_mode: str = "html",
+) -> dict:
 
+    data = {
+        "chat_id": chat_id,
+        "photo": photo,
+        "caption": caption,
+        "parse_mode": parse_mode,
+    }
+
+    if reply_markup:
+        data["reply_markup"] = _markup(reply_markup)
+
+    return await _post("sendPhoto", data)
+
+
+async def send_styled_video(
+    chat_id: int,
+    video: str,
+    caption: str,
+    reply_markup=None,
+    parse_mode: str = "html",
+) -> dict:
+
+    data = {
+        "chat_id": chat_id,
+        "video": video,
+        "caption": caption,
+        "parse_mode": parse_mode,
+    }
+
+    if reply_markup:
+        data["reply_markup"] = _markup(reply_markup)
+
+    return await _post("sendVideo", data)
+
+
+# ─────────────────────────────────────────────
+# EDIT FUNCTIONS
+# ─────────────────────────────────────────────
 
 async def edit_styled(
     chat_id: int,
@@ -113,42 +164,7 @@ async def edit_styled(
     if reply_markup:
         data["reply_markup"] = _markup(reply_markup)
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{BASE}/editMessageReplyMarkup", data=data) as resp:
-            result = await resp.json()
-
-            if not result.get("ok"):
-                print(f"[styled_send] editMarkup error: {result}")
-
-            return result
-
-
-async def edit_caption_styled(
-    chat_id: int,
-    message_id: int,
-    caption: str,
-    reply_markup=None,
-    parse_mode: str = "html",
-) -> dict:
-
-    data = {
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "caption": caption,
-        "parse_mode": parse_mode,
-    }
-
-    if reply_markup:
-        data["reply_markup"] = _markup(reply_markup)
-
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{BASE}/editMessageCaption", data=data) as resp:
-            result = await resp.json()
-
-            if not result.get("ok"):
-                print(f"[styled_send] editCaption error: {result}")
-
-            return result
+    return await _post("editMessageReplyMarkup", data)
 
 
 async def edit_text_styled(
@@ -170,11 +186,25 @@ async def edit_text_styled(
     if reply_markup:
         data["reply_markup"] = _markup(reply_markup)
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{BASE}/editMessageText", data=data) as resp:
-            result = await resp.json()
+    return await _post("editMessageText", data)
 
-            if not result.get("ok"):
-                print(f"[styled_send] editText error: {result}")
 
-            return result
+async def edit_caption_styled(
+    chat_id: int,
+    message_id: int,
+    caption: str,
+    reply_markup=None,
+    parse_mode: str = "html",
+) -> dict:
+
+    data = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "caption": caption,
+        "parse_mode": parse_mode,
+    }
+
+    if reply_markup:
+        data["reply_markup"] = _markup(reply_markup)
+
+    return await _post("editMessageCaption", data)
