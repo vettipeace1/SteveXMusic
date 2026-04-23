@@ -114,18 +114,30 @@ async def _controls(_, query: types.CallbackQuery):
             mtext = re.sub(
                 r"\n\n<blockquote>.*?</blockquote>",
                 "",
-                query.message.caption.html or query.message.text.html,
+                query.message.caption.html if query.message.photo else query.message.text.html,
                 flags=re.DOTALL,
             )
             keyboard = buttons.controls(
                 chat_id, status=status if action != "resume" else None
             )
-            await edit_text_styled(
-                chat_id=chat_id,
-                message_id=query.message.id,
-                text=f"{mtext}\n\n<blockquote>{reply}</blockquote>",
-                reply_markup=keyboard,
-            )
+            new_text = f"{mtext}\n\n<blockquote>{reply}</blockquote>"
+
+            # Use caption variant for photo messages, text variant for plain text.
+            # Both go through HTTP Bot API so style= colours are preserved.
+            if query.message.photo:
+                await edit_caption_styled(
+                    chat_id=chat_id,
+                    message_id=query.message.id,
+                    caption=new_text,
+                    reply_markup=keyboard,
+                )
+            else:
+                await edit_text_styled(
+                    chat_id=chat_id,
+                    message_id=query.message.id,
+                    text=new_text,
+                    reply_markup=keyboard,
+                )
     except Exception:
         pass
 
