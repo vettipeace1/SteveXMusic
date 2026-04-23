@@ -9,7 +9,7 @@ from ntgcalls import (ConnectionNotFound, TelegramServerError,
                       RTMPStreamingUnsupported, ConnectionError)
 from pyrogram.errors import (ChatSendMediaForbidden, ChatSendPhotosForbidden,
                              MessageIdInvalid)
-from pyrogram.types import Message
+from pyrogram.types import InputMediaPhoto, Message
 from pytgcalls import PyTgCalls, exceptions, types
 from pytgcalls.pytgcalls_session import PyTgCallsSession
 
@@ -17,7 +17,6 @@ from anony import (app, config, db, lang, logger,
                    queue, thumb, userbot, yt)
 from anony.helpers import Media, Track, buttons
 from anony.helpers.styled_send import (
-    edit_caption_styled,
     edit_text_styled,
     send_styled_photo,
     send_styled,
@@ -91,8 +90,8 @@ class TgCall(PyTgCalls):
                 media.time = 1
                 await db.add_call(chat_id)
 
-                # ── Escape special HTML chars in all dynamic fields ──────────
-                safe_url   = str(media.url or "")
+                # ── Escape special HTML chars so caption never crashes ───────
+                safe_url   = str(media.url      or "")
                 safe_title = escape(str(media.title    or ""))
                 safe_dur   = escape(str(media.duration or ""))
                 safe_user  = escape(str(media.user     or ""))
@@ -106,31 +105,53 @@ class TgCall(PyTgCalls):
                 keyboard = buttons.controls(chat_id)
 
                 if _thumb:
-                    # Telegram does NOT allow editing a text message into a photo.
-                    # Always send a brand-new photo via raw Bot API → colours work.
-                    result = await send_styled_photo(
-                        chat_id=chat_id,
-                        photo=_thumb,
-                        caption=text,
-                        reply_markup=keyboard,
-                    )
-                    if result.get("ok"):
-                        media.message_id = result["result"]["message_id"]
-                    # Clean up the old "Searching..." / "Downloading..." message
+                    # Step 1: use Pyrogram to edit the existing message into a photo
+                    # (this preserves the message in-place — no delete needed)
                     try:
-                        await message.delete()
+                        await message.edit_media(
+                            media=InputMediaPhoto(
+                                media=_thumb,
+                                caption=text,
+                            ),
+                            reply_markup=keyboard,
+                        )
+                        # Step 2: now re-send ONLY the reply_markup via raw API
+                        # so the styled colours are applied on top
+                        from anony.helpers.styled_send import edit_styled
+                        await edit_styled(
+                            chat_id=chat_id,
+                            message_id=message.id,
+                            reply_markup=keyboard,
+                        )
+                    except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
+                        # Photo not allowed or message gone — send fresh via raw API
+                        result = await send_styled_photo(
+                            chat_id=chat_id,
+                            photo=_thumb,
+                            caption=text,
+                            reply_markup=keyboard,
+                        )
+                        if result.get("ok"):
+                            media.message_id = result["result"]["message_id"]
                     except Exception:
-                        pass
+                        # Any other edit failure — send fresh styled text
+                        result = await send_styled(
+                            chat_id=chat_id,
+                            text=text,
+                            reply_markup=keyboard,
+                        )
+                        if result.get("ok"):
+                            media.message_id = result["result"]["message_id"]
                 else:
-                    # No thumbnail — edit the existing message via raw Bot API
+                    # No thumbnail — edit text via raw API → colours work
                     result = await edit_text_styled(
                         chat_id=chat_id,
                         message_id=message.id,
                         text=text,
                         reply_markup=keyboard,
                     )
-                    # If edit failed (message already deleted etc.) send a fresh one
                     if not result.get("ok"):
+                        # Edit failed — send fresh
                         result = await send_styled(
                             chat_id=chat_id,
                             text=text,
@@ -140,14 +161,7 @@ class TgCall(PyTgCalls):
                             media.message_id = result["result"]["message_id"]
 
         except (ChatSendMediaForbidden, ChatSendPhotosForbidden):
-            # Photo not allowed in this chat — fall back to plain text
-            result = await send_styled(
-                chat_id=chat_id,
-                text=text,
-                reply_markup=keyboard,
-            )
-            if result.get("ok"):
-                media.message_id = result["result"]["message_id"]
+            pass
         except FileNotFoundError:
             await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             await self.play_next(chat_id)
