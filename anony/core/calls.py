@@ -3,8 +3,6 @@
 # This file is part of AnonXMusic
 
 
-from html import escape
-
 from ntgcalls import (ConnectionNotFound, TelegramServerError,
                       RTMPStreamingUnsupported, ConnectionError)
 from pyrogram.errors import (ChatSendMediaForbidden, ChatSendPhotosForbidden,
@@ -16,11 +14,6 @@ from pytgcalls.pytgcalls_session import PyTgCallsSession
 from anony import (app, config, db, lang, logger,
                    queue, thumb, userbot, yt)
 from anony.helpers import Media, Track, buttons
-from anony.helpers.styled_send import (
-    edit_text_styled,
-    send_styled_photo,
-    send_styled,
-)
 
 
 class TgCall(PyTgCalls):
@@ -89,25 +82,15 @@ class TgCall(PyTgCalls):
             if not seek_time:
                 media.time = 1
                 await db.add_call(chat_id)
-
-                # ── Escape special HTML chars so caption never crashes ───────
-                safe_url   = str(media.url      or "")
-                safe_title = escape(str(media.title    or ""))
-                safe_dur   = escape(str(media.duration or ""))
-                safe_user  = escape(str(media.user     or ""))
-
                 text = _lang["play_media"].format(
-                    safe_url,
-                    safe_title,
-                    safe_dur,
-                    safe_user,
+                    media.url,
+                    media.title,
+                    media.duration,
+                    media.user,
                 )
                 keyboard = buttons.controls(chat_id)
-
-                if _thumb:
-                    # Step 1: use Pyrogram to edit the existing message into a photo
-                    # (this preserves the message in-place — no delete needed)
-                    try:
+                try:
+                    if _thumb:
                         await message.edit_media(
                             media=InputMediaPhoto(
                                 media=_thumb,
@@ -115,53 +98,23 @@ class TgCall(PyTgCalls):
                             ),
                             reply_markup=keyboard,
                         )
-                        # Step 2: now re-send ONLY the reply_markup via raw API
-                        # so the styled colours are applied on top
-                        from anony.helpers.styled_send import edit_styled
-                        await edit_styled(
-                            chat_id=chat_id,
-                            message_id=message.id,
-                            reply_markup=keyboard,
-                        )
-                    except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
-                        # Photo not allowed or message gone — send fresh via raw API
-                        result = await send_styled_photo(
+                    else:
+                        await message.edit_text(text, reply_markup=keyboard)
+                except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
+                    if _thumb:
+                        sent = await app.send_photo(
                             chat_id=chat_id,
                             photo=_thumb,
                             caption=text,
                             reply_markup=keyboard,
                         )
-                        if result.get("ok"):
-                            media.message_id = result["result"]["message_id"]
-                    except Exception:
-                        # Any other edit failure — send fresh styled text
-                        result = await send_styled(
+                    else:
+                        sent = await app.send_message(
                             chat_id=chat_id,
                             text=text,
                             reply_markup=keyboard,
                         )
-                        if result.get("ok"):
-                            media.message_id = result["result"]["message_id"]
-                else:
-                    # No thumbnail — edit text via raw API → colours work
-                    result = await edit_text_styled(
-                        chat_id=chat_id,
-                        message_id=message.id,
-                        text=text,
-                        reply_markup=keyboard,
-                    )
-                    if not result.get("ok"):
-                        # Edit failed — send fresh
-                        result = await send_styled(
-                            chat_id=chat_id,
-                            text=text,
-                            reply_markup=keyboard,
-                        )
-                        if result.get("ok"):
-                            media.message_id = result["result"]["message_id"]
-
-        except (ChatSendMediaForbidden, ChatSendPhotosForbidden):
-            pass
+                    media.message_id = sent.id
         except FileNotFoundError:
             await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             await self.play_next(chat_id)
