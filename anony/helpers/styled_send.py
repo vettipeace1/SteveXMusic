@@ -2,144 +2,119 @@
 
 import json
 import os
-import re
-from html import escape
+from html import escape, unescape
+from html.parser import HTMLParser
 import aiohttp
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# Harmless errors that don't need to be printed
 _IGNORE_ERRORS = {"message is not modified"}
+
+# Tags the Telegram Bot API HTML mode supports
+_BOT_API_SAFE_TAGS = {
+    "b", "strong",
+    "i", "em",
+    "u", "ins",
+    "s", "strike", "del",
+    "code", "pre",
+    "blockquote",
+    "a",
+}
 
 
 # ─────────────────────────────────────────────────────────────────
 #  HTML SANITISER
-#  Pyrogram's .html / mention property generates strings like:
-#    <a href="tg://user?id=123">KING〽~$STEVE⊬🦅</a>
 #
-#  The Telegram Bot API's HTML parser rejects this with:
-#    "can't parse entities: Unexpected end of name token"
-#  because it tries to interpret characters like $, ~, 〽, ⊬ inside
-#  an <a> tag's text as part of an HTML entity name.
+#  Converts Pyrogram HTML (which may contain tg:// mention links and
+#  unescaped special chars in usernames) into safe Bot API HTML.
 #
-#  Strategy (applied in order):
-#   1. Extract tg:// mention links → keep name only, wrapped in <b>.
-#      The Bot API does NOT support tg:// hrefs in edit/send calls.
-#   2. Extract any other <a href="..."> links → keep as-is but
-#      escape the inner text so special chars don't break parsing.
-#   3. Escape all remaining plain text fragments (outside tags):
-#      &  →  &amp;
-#      <  →  &lt;
-#      >  →  &gt;
-#   4. Recognised safe tags (<b> <i> <u> <s> <code> <pre>
-#      <blockquote>) are preserved verbatim.
-#
-#  This means ALL names — Arabic, Chinese, emoji, $symbols, ~tildes,
-#  mixed scripts, zero-width chars — are safe to pass through.
+#  Key behaviours:
+#   • tg:// mention links  →  plain text only (no tag wrapping)
+#     e.g. <a href="tg://user?id=123">KING〽~$STEVE⊬🦅</a>
+#          → KING〽~$STEVE⊬🦅  (just the name, no bold, no link)
+#   • https:// links       →  kept as <a href="...">text</a>
+#   • Safe tags (<b><i><u><s><code><pre><blockquote>) → kept
+#   • All text nodes       →  html.escape()'d  (handles every
+#     script, emoji, symbol, ~$〽⊬ etc.)
+#   • Unsupported tags     →  dropped, inner text kept as plain text
 # ─────────────────────────────────────────────────────────────────
 
-# Tags the Bot API's HTML mode actually supports
-_SAFE_OPEN  = re.compile(
-    r'<(/?)(b|i|u|s|code|pre|blockquote)(\s[^>]*)?>',
-    re.IGNORECASE,
-)
-# Full <a href="...">...</a> pattern (greedy on inner text is fine
-# because we process left-to-right via re.split logic below)
-_A_TAG = re.compile(
-    r'<a\s+href=["\']([^"\']*)["\'][^>]*>(.*?)</a>',
-    re.IGNORECASE | re.DOTALL,
-)
-_TG_HREF = re.compile(r'^tg://', re.IGNORECASE)
+class _Sanitiser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self._out = []
+        # stack entries: (tagname, is_tg_link, should_emit_close_tag)
+        self._stack = []
+        # when True we suppress output (inside unsupported tag)
+        # — actually we keep text, just don't emit the tags themselves
+        self._in_tg_link = False  # inside a tg:// <a> tag
+
+    def handle_starttag(self, tag, attrs):
+        t = tag.lower()
+        if t not in _BOT_API_SAFE_TAGS:
+            self._stack.append((t, False, False))
+            return
+
+        if t == "a":
+            href = dict(attrs).get("href", "")
+            if href.lower().startswith("tg://"):
+                # tg:// not supported — emit name as plain text only
+                self._in_tg_link = True
+                self._stack.append(("a", True, False))
+            else:
+                safe_href = escape(href, quote=True)
+                self._out.append(f'<a href="{safe_href}">')
+                self._stack.append(("a", False, True))
+        else:
+            self._out.append(f"<{t}>")
+            self._stack.append((t, False, True))
+
+    def handle_endtag(self, tag):
+        t = tag.lower()
+        for i in range(len(self._stack) - 1, -1, -1):
+            entry = self._stack[i]
+            if entry[0] == t:
+                self._stack.pop(i)
+                _, is_tg, emit_close = entry
+                if is_tg:
+                    self._in_tg_link = False
+                elif emit_close:
+                    self._out.append(f"</{t}>")
+                return
+
+    def handle_data(self, data):
+        # Always escape text content — handles ALL special chars
+        self._out.append(escape(data, quote=False))
+
+    def handle_entityref(self, name):
+        # Named entity e.g. &amp; &lt; — pass through
+        self._out.append(f"&{name};")
+
+    def handle_charref(self, name):
+        # Numeric entity e.g. &#123; &#xAB; — pass through
+        self._out.append(f"&#{name};")
+
+    def result(self) -> str:
+        return "".join(self._out)
 
 
 def _sanitise_html(text: str) -> str:
     """
-    Make an HTML string safe for Telegram Bot API parse_mode=html.
+    Make any HTML string safe for Telegram Bot API parse_mode=html.
 
-    Handles every special character in usernames/titles:
-    ~  $  &  <  >  "  '  〽  ⊬  emojis  Arabic  Cyrillic  etc.
+    Supports ALL usernames/names regardless of characters:
+    ~  $  &  <  >  "  '  〽  ⊬  🦅  emojis  Arabic  Cyrillic
+    Chinese  Tamil  mixed scripts  zero-width chars  etc.
+
+    tg:// mention links are stripped to plain text (name only, no tag).
+    https:// links are preserved.
     """
     if not text:
         return text
-
-    result = []
-    pos = 0
-
-    for m in _A_TAG.finditer(text):
-        start, end = m.start(), m.end()
-        href, inner = m.group(1), m.group(2)
-
-        # 1. Escape plain text before this tag
-        plain = text[pos:start]
-        result.append(_escape_outside_tags(plain))
-
-        # 2. Handle the <a> tag itself
-        if _TG_HREF.match(href):
-            # tg:// links are NOT supported by Bot API in edit calls.
-            # Convert to bold so the name is still visible.
-            result.append(f"<b>{escape(inner)}</b>")
-        else:
-            # Regular https:// link — keep it, but escape the inner text
-            safe_href = escape(href, quote=True)
-            result.append(f'<a href="{safe_href}">{escape(inner)}</a>')
-
-        pos = end
-
-    # Remaining text after last <a> tag
-    result.append(_escape_outside_tags(text[pos:]))
-
-    return "".join(result)
-
-
-def _escape_outside_tags(fragment: str) -> str:
-    """
-    Escape a fragment of text that may contain safe HTML tags
-    (<b>, <i>, <u>, <s>, <code>, <pre>, <blockquote>) but also
-    raw special characters in plain text sections.
-
-    We split on safe tags, escape everything outside them, and
-    reassemble.
-    """
-    if not fragment:
-        return fragment
-
-    parts = _SAFE_OPEN.split(fragment)
-    # re.split with a capturing group gives:
-    # [before, slash, tag, attrs, after, slash, tag, attrs, ...]
-    # When there are no groups captured it's just [whole_string].
-    # _SAFE_OPEN has 3 capturing groups so chunks come in groups of 4:
-    # text, slash, tagname, attrs  (repeat)
-
-    if len(parts) == 1:
-        # No safe tags found — escape everything
-        return _escape_text(parts[0])
-
-    out = []
-    i = 0
-    while i < len(parts):
-        if i % 4 == 0:
-            # Plain text segment — escape it
-            out.append(_escape_text(parts[i]))
-        elif i % 4 == 1:
-            # Slash (/ or empty) — part of tag reconstruction
-            slash = parts[i]
-            tagname = parts[i + 1]
-            attrs = parts[i + 2] or ""
-            # Reconstruct the safe tag verbatim
-            out.append(f"<{slash}{tagname}{attrs}>")
-            i += 2  # skip tagname and attrs, loop will +1 more
-        i += 1
-
-    return "".join(out)
-
-
-def _escape_text(text: str) -> str:
-    """
-    Escape &, <, > in plain text (not inside any HTML tag).
-    Uses html.escape which handles & → &amp;  < → &lt;  > → &gt;
-    """
-    return escape(text, quote=False)
+    p = _Sanitiser()
+    p.feed(text)
+    return p.result()
 
 
 # ─────────────────────────────────────────────────────────────────
