@@ -2,15 +2,149 @@
 
 import json
 import os
+import re
+from html import escape
 import aiohttp
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# This error is harmless — happens when timer tries to update
-# but the markup hasn't changed yet. Suppress it silently.
+# Harmless errors that don't need to be printed
 _IGNORE_ERRORS = {"message is not modified"}
 
+
+# ─────────────────────────────────────────────────────────────────
+#  HTML SANITISER
+#  Pyrogram's .html / mention property generates strings like:
+#    <a href="tg://user?id=123">KING〽~$STEVE⊬🦅</a>
+#
+#  The Telegram Bot API's HTML parser rejects this with:
+#    "can't parse entities: Unexpected end of name token"
+#  because it tries to interpret characters like $, ~, 〽, ⊬ inside
+#  an <a> tag's text as part of an HTML entity name.
+#
+#  Strategy (applied in order):
+#   1. Extract tg:// mention links → keep name only, wrapped in <b>.
+#      The Bot API does NOT support tg:// hrefs in edit/send calls.
+#   2. Extract any other <a href="..."> links → keep as-is but
+#      escape the inner text so special chars don't break parsing.
+#   3. Escape all remaining plain text fragments (outside tags):
+#      &  →  &amp;
+#      <  →  &lt;
+#      >  →  &gt;
+#   4. Recognised safe tags (<b> <i> <u> <s> <code> <pre>
+#      <blockquote>) are preserved verbatim.
+#
+#  This means ALL names — Arabic, Chinese, emoji, $symbols, ~tildes,
+#  mixed scripts, zero-width chars — are safe to pass through.
+# ─────────────────────────────────────────────────────────────────
+
+# Tags the Bot API's HTML mode actually supports
+_SAFE_OPEN  = re.compile(
+    r'<(/?)(b|i|u|s|code|pre|blockquote)(\s[^>]*)?>',
+    re.IGNORECASE,
+)
+# Full <a href="...">...</a> pattern (greedy on inner text is fine
+# because we process left-to-right via re.split logic below)
+_A_TAG = re.compile(
+    r'<a\s+href=["\']([^"\']*)["\'][^>]*>(.*?)</a>',
+    re.IGNORECASE | re.DOTALL,
+)
+_TG_HREF = re.compile(r'^tg://', re.IGNORECASE)
+
+
+def _sanitise_html(text: str) -> str:
+    """
+    Make an HTML string safe for Telegram Bot API parse_mode=html.
+
+    Handles every special character in usernames/titles:
+    ~  $  &  <  >  "  '  〽  ⊬  emojis  Arabic  Cyrillic  etc.
+    """
+    if not text:
+        return text
+
+    result = []
+    pos = 0
+
+    for m in _A_TAG.finditer(text):
+        start, end = m.start(), m.end()
+        href, inner = m.group(1), m.group(2)
+
+        # 1. Escape plain text before this tag
+        plain = text[pos:start]
+        result.append(_escape_outside_tags(plain))
+
+        # 2. Handle the <a> tag itself
+        if _TG_HREF.match(href):
+            # tg:// links are NOT supported by Bot API in edit calls.
+            # Convert to bold so the name is still visible.
+            result.append(f"<b>{escape(inner)}</b>")
+        else:
+            # Regular https:// link — keep it, but escape the inner text
+            safe_href = escape(href, quote=True)
+            result.append(f'<a href="{safe_href}">{escape(inner)}</a>')
+
+        pos = end
+
+    # Remaining text after last <a> tag
+    result.append(_escape_outside_tags(text[pos:]))
+
+    return "".join(result)
+
+
+def _escape_outside_tags(fragment: str) -> str:
+    """
+    Escape a fragment of text that may contain safe HTML tags
+    (<b>, <i>, <u>, <s>, <code>, <pre>, <blockquote>) but also
+    raw special characters in plain text sections.
+
+    We split on safe tags, escape everything outside them, and
+    reassemble.
+    """
+    if not fragment:
+        return fragment
+
+    parts = _SAFE_OPEN.split(fragment)
+    # re.split with a capturing group gives:
+    # [before, slash, tag, attrs, after, slash, tag, attrs, ...]
+    # When there are no groups captured it's just [whole_string].
+    # _SAFE_OPEN has 3 capturing groups so chunks come in groups of 4:
+    # text, slash, tagname, attrs  (repeat)
+
+    if len(parts) == 1:
+        # No safe tags found — escape everything
+        return _escape_text(parts[0])
+
+    out = []
+    i = 0
+    while i < len(parts):
+        if i % 4 == 0:
+            # Plain text segment — escape it
+            out.append(_escape_text(parts[i]))
+        elif i % 4 == 1:
+            # Slash (/ or empty) — part of tag reconstruction
+            slash = parts[i]
+            tagname = parts[i + 1]
+            attrs = parts[i + 2] or ""
+            # Reconstruct the safe tag verbatim
+            out.append(f"<{slash}{tagname}{attrs}>")
+            i += 2  # skip tagname and attrs, loop will +1 more
+        i += 1
+
+    return "".join(out)
+
+
+def _escape_text(text: str) -> str:
+    """
+    Escape &, <, > in plain text (not inside any HTML tag).
+    Uses html.escape which handles & → &amp;  < → &lt;  > → &gt;
+    """
+    return escape(text, quote=False)
+
+
+# ─────────────────────────────────────────────────────────────────
+#  MARKUP SERIALISER
+# ─────────────────────────────────────────────────────────────────
 
 def _markup(markup) -> str:
     rows = []
@@ -35,11 +169,14 @@ def _markup(markup) -> str:
 
 def _log_error(fn_name: str, result: dict) -> None:
     desc = result.get("description", "")
-    # Suppress harmless "not modified" errors from timer updates
     if any(e in desc for e in _IGNORE_ERRORS):
         return
     print(f"[styled_send] {fn_name} error: {result}")
 
+
+# ─────────────────────────────────────────────────────────────────
+#  PUBLIC API
+# ─────────────────────────────────────────────────────────────────
 
 async def send_styled_video(
     chat_id: int,
@@ -52,7 +189,7 @@ async def send_styled_video(
     data = {
         "chat_id": chat_id,
         "video": video,
-        "caption": caption,
+        "caption": _sanitise_html(caption),
         "parse_mode": parse_mode,
     }
     if reply_markup:
@@ -76,7 +213,7 @@ async def send_styled(
 ) -> dict:
     data = {
         "chat_id": chat_id,
-        "text": text,
+        "text": _sanitise_html(text),
         "parse_mode": parse_mode,
         "disable_web_page_preview": True,
     }
@@ -121,7 +258,7 @@ async def edit_caption_styled(
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
-        "caption": caption,
+        "caption": _sanitise_html(caption),
         "parse_mode": parse_mode,
     }
     if reply_markup:
@@ -144,7 +281,7 @@ async def edit_text_styled(
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
-        "text": text,
+        "text": _sanitise_html(text),
         "parse_mode": parse_mode,
         "disable_web_page_preview": True,
     }
