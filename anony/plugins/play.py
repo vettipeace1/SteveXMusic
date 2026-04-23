@@ -2,7 +2,6 @@
 # Licensed under the MIT License.
 # This file is part of AnonXMusic
 
-
 from pathlib import Path
 
 from pyrogram import filters, types
@@ -10,6 +9,7 @@ from pyrogram import filters, types
 from anony import anon, app, config, db, lang, queue, tg, yt
 from anony.helpers import buttons, utils
 from anony.helpers._play import checkUB
+from anony.helpers.styled_send import send_styled
 
 
 def playlist_to_queue(chat_id: int, tracks: list) -> str:
@@ -19,6 +19,7 @@ def playlist_to_queue(chat_id: int, tracks: list) -> str:
         text += f"<b>{pos}.</b> {track.title}\n"
     text = text[:1948] + "</blockquote>"
     return text
+
 
 @app.on_message(
     filters.command(["play", "playforce", "vplay", "vplayforce"])
@@ -95,18 +96,29 @@ async def play_hndlr(
         position = queue.add(m.chat.id, file)
 
         if position != 0 or await db.get_call(m.chat.id):
-            await sent.edit_text(
-                m.lang["play_queued"].format(
-                    position,
-                    file.url,
-                    file.title,
-                    file.duration,
-                    m.from_user.mention,
-                ),
+            # ── delete the plain "Searching…" message first ──────────────────
+            try:
+                await sent.delete()
+            except Exception:
+                pass
+
+            # ── send via HTTP Bot API so style="primary" (blue) is honoured ──
+            queued_text = m.lang["play_queued"].format(
+                position,
+                file.url,
+                file.title,
+                file.duration,
+                mention,
+            )
+            await send_styled(
+                chat_id=m.chat.id,
+                text=queued_text,
                 reply_markup=buttons.play_queued(
                     m.chat.id, file.id, m.lang["play_now"]
                 ),
+                reply_to_message_id=m.id,
             )
+
             if tracks:
                 added = playlist_to_queue(m.chat.id, tracks)
                 await app.send_message(
