@@ -7,13 +7,19 @@ from ntgcalls import (ConnectionNotFound, TelegramServerError,
                       RTMPStreamingUnsupported, ConnectionError)
 from pyrogram.errors import (ChatSendMediaForbidden, ChatSendPhotosForbidden,
                              MessageIdInvalid)
-from pyrogram.types import InputMediaPhoto, Message
+from pyrogram.types import Message
 from pytgcalls import PyTgCalls, exceptions, types
 from pytgcalls.pytgcalls_session import PyTgCallsSession
 
 from anony import (app, config, db, lang, logger,
                    queue, thumb, userbot, yt)
 from anony.helpers import Media, Track, buttons
+from anony.helpers.styled_send import (
+    edit_caption_styled,
+    edit_text_styled,
+    send_styled_photo,
+    send_styled,
+)
 
 
 class TgCall(PyTgCalls):
@@ -88,33 +94,47 @@ class TgCall(PyTgCalls):
                     media.duration,
                     media.user,
                 )
+                # controls() with no args → shows only the 5 arrow buttons with colours
                 keyboard = buttons.controls(chat_id)
+
                 try:
                     if _thumb:
-                        await message.edit_media(
-                            media=InputMediaPhoto(
-                                media=_thumb,
-                                caption=text,
-                            ),
+                        # Edit existing message to photo+caption via raw API → colours work
+                        await edit_caption_styled(
+                            chat_id=chat_id,
+                            message_id=message.id,
+                            caption=text,
                             reply_markup=keyboard,
                         )
                     else:
-                        await message.edit_text(text, reply_markup=keyboard)
+                        # Edit existing message to plain text via raw API → colours work
+                        await edit_text_styled(
+                            chat_id=chat_id,
+                            message_id=message.id,
+                            text=text,
+                            reply_markup=keyboard,
+                        )
                 except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
+                    # Fallback: send a new message via raw API → colours still work
                     if _thumb:
-                        sent = await app.send_photo(
+                        result = await send_styled_photo(
                             chat_id=chat_id,
                             photo=_thumb,
                             caption=text,
                             reply_markup=keyboard,
                         )
+                        # Store new message id so skip/stop can delete it
+                        if result.get("ok"):
+                            media.message_id = result["result"]["message_id"]
                     else:
-                        sent = await app.send_message(
+                        result = await send_styled(
                             chat_id=chat_id,
                             text=text,
                             reply_markup=keyboard,
                         )
-                    media.message_id = sent.id
+                        if result.get("ok"):
+                            media.message_id = result["result"]["message_id"]
+
         except FileNotFoundError:
             await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             await self.play_next(chat_id)
