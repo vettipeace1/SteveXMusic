@@ -1,5 +1,7 @@
 # Copyright (c) 2025 AnonymousX1025
 # Licensed under the MIT License.
+# This file is part of AnonXMusic
+
 
 from pathlib import Path
 
@@ -8,7 +10,6 @@ from pyrogram import filters, types
 from anony import anon, app, config, db, lang, queue, tg, yt
 from anony.helpers import buttons, utils
 from anony.helpers._play import checkUB
-from anony.helpers.styled_send import edit_text_styled  # ✅ ADDED
 
 
 def playlist_to_queue(chat_id: int, tracks: list) -> str:
@@ -18,7 +19,6 @@ def playlist_to_queue(chat_id: int, tracks: list) -> str:
         text += f"<b>{pos}.</b> {track.title}\n"
     text = text[:1948] + "</blockquote>"
     return text
-
 
 @app.on_message(
     filters.command(["play", "playforce", "vplay", "vplayforce"])
@@ -89,19 +89,14 @@ async def play_hndlr(
         await utils.play_log(m, sent.link, file.title, file.duration)
 
     file.user = mention
-
     if force:
         queue.force_add(m.chat.id, file)
     else:
         position = queue.add(m.chat.id, file)
 
         if position != 0 or await db.get_call(m.chat.id):
-
-            # ✅ FIXED: Styled edit instead of Pyrogram edit_text
-            await edit_text_styled(
-                chat_id=m.chat.id,
-                message_id=sent.id,
-                text=m.lang["play_queued"].format(
+            await sent.edit_text(
+                m.lang["play_queued"].format(
                     position,
                     file.url,
                     file.title,
@@ -112,7 +107,6 @@ async def play_hndlr(
                     m.chat.id, file.id, m.lang["play_now"]
                 ),
             )
-
             if tracks:
                 added = playlist_to_queue(m.chat.id, tracks)
                 await app.send_message(
@@ -130,10 +124,8 @@ async def play_hndlr(
             file.file_path = await yt.download(file.id, video=video)
 
     await anon.play_media(chat_id=m.chat.id, message=sent, media=file)
-
     if not tracks:
         return
-
     added = playlist_to_queue(m.chat.id, tracks)
     await app.send_message(
         chat_id=m.chat.id,
