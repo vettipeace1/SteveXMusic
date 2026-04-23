@@ -10,6 +10,7 @@ from pyrogram import filters, types
 from anony import anon, app, config, db, lang, queue, tg, yt
 from anony.helpers import buttons, utils
 from anony.helpers._play import checkUB
+from anony.helpers.styled_send import edit_text_styled
 
 
 def playlist_to_queue(chat_id: int, tracks: list) -> str:
@@ -95,14 +96,20 @@ async def play_hndlr(
         position = queue.add(m.chat.id, file)
 
         if position != 0 or await db.get_call(m.chat.id):
-            await sent.edit_text(
-                m.lang["play_queued"].format(
-                    position,
-                    file.url,
-                    file.title,
-                    file.duration,
-                    m.from_user.mention,
-                ),
+            queued_text = m.lang["play_queued"].format(
+                position,
+                file.url,
+                file.title,
+                file.duration,
+                m.from_user.mention,
+            )
+            # First send the text via Kurigram (plain, no markup)
+            await sent.edit_text(queued_text)
+            # Then patch the markup via HTTP Bot API so style="primary" (🔵) is kept
+            await edit_text_styled(
+                chat_id=m.chat.id,
+                message_id=sent.id,
+                text=queued_text,
                 reply_markup=buttons.play_queued(
                     m.chat.id, file.id, m.lang["play_now"]
                 ),
