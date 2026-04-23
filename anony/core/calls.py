@@ -14,6 +14,7 @@ from pytgcalls.pytgcalls_session import PyTgCallsSession
 from anony import (app, config, db, lang, logger,
                    queue, thumb, userbot, yt)
 from anony.helpers import Media, Track, buttons
+from anony.helpers.styled_send import edit_styled
 
 
 class TgCall(PyTgCalls):
@@ -89,6 +90,7 @@ class TgCall(PyTgCalls):
                     media.user,
                 )
                 keyboard = buttons.controls(chat_id)
+                sent_id = None
                 try:
                     if _thumb:
                         await message.edit_media(
@@ -98,8 +100,10 @@ class TgCall(PyTgCalls):
                             ),
                             reply_markup=keyboard,
                         )
+                        sent_id = message.id
                     else:
                         await message.edit_text(text, reply_markup=keyboard)
+                        sent_id = message.id
                 except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
                     if _thumb:
                         sent = await app.send_photo(
@@ -115,6 +119,20 @@ class TgCall(PyTgCalls):
                             reply_markup=keyboard,
                         )
                     media.message_id = sent.id
+                    sent_id = sent.id
+
+                # Patch the markup via HTTP Bot API so style= colours are preserved.
+                # Kurigram strips style= when sending; edit_styled re-applies it.
+                if sent_id:
+                    try:
+                        await edit_styled(
+                            chat_id=chat_id,
+                            message_id=sent_id,
+                            reply_markup=keyboard,
+                        )
+                    except Exception:
+                        pass
+
         except FileNotFoundError:
             await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             await self.play_next(chat_id)
