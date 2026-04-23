@@ -10,7 +10,6 @@ from pyrogram import filters, types
 from anony import anon, app, config, db, lang, queue, tg, yt
 from anony.helpers import buttons, utils
 from anony.helpers._play import checkUB
-from anony.helpers.styled_send import edit_text_styled
 
 
 def playlist_to_queue(chat_id: int, tracks: list) -> str:
@@ -20,7 +19,6 @@ def playlist_to_queue(chat_id: int, tracks: list) -> str:
         text += f"<b>{pos}.</b> {track.title}\n"
     text = text[:1948] + "</blockquote>"
     return text
-
 
 @app.on_message(
     filters.command(["play", "playforce", "vplay", "vplayforce"])
@@ -97,11 +95,8 @@ async def play_hndlr(
         position = queue.add(m.chat.id, file)
 
         if position != 0 or await db.get_call(m.chat.id):
-            # Use edit_text_styled (raw Bot API) so "Play Now" button colour works in groups
-            await edit_text_styled(
-                chat_id=m.chat.id,
-                message_id=sent.id,
-                text=m.lang["play_queued"].format(
+            await sent.edit_text(
+                m.lang["play_queued"].format(
                     position,
                     file.url,
                     file.title,
