@@ -10,6 +10,7 @@ from pyrogram import enums, errors, filters, types
 
 from anony import anon, app, config, db, lang, queue, tasks, userbot, yt
 from anony.helpers import buttons
+from anony.helpers.styled_send import edit_styled
 
 
 @app.on_message(filters.video_chat_started, group=19)
@@ -85,7 +86,9 @@ async def update_timer(length=10):
                 if not timer and not remove:
                     continue
 
-                await app.edit_message_reply_markup(
+                # Use HTTP Bot API via edit_styled so style= colours are preserved.
+                # Previously app.edit_message_reply_markup (kurigram) stripped style=.
+                await edit_styled(
                     chat_id=chat_id,
                     message_id=message_id,
                     reply_markup=buttons.controls(
@@ -108,7 +111,8 @@ async def vc_watcher(sleep=15):
             if len(participants) < 2 and media.time > 30:
                 _lang = await lang.get_lang(chat_id)
                 try:
-                    sent = await app.edit_message_reply_markup(
+                    # Use edit_styled so the 🔴 stopped colour is preserved.
+                    await edit_styled(
                         chat_id=chat_id,
                         message_id=media.message_id,
                         reply_markup=buttons.controls(
@@ -116,7 +120,7 @@ async def vc_watcher(sleep=15):
                         ),
                     )
                     await anon.stop(chat_id)
-                    await sent.reply_text(_lang["auto_left"])
+                    await app.send_message(chat_id=chat_id, text=_lang["auto_left"])
                 except errors.MessageIdInvalid:
                     pass
 
