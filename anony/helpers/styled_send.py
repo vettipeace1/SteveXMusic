@@ -2,10 +2,29 @@
 
 import json
 import os
+import re
 import aiohttp
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
+
+
+def _sanitise_html(text: str) -> str:
+    """
+    Fix bare '&' characters that are NOT part of a valid HTML entity.
+
+    Pyrogram's .html property wraps mentions as:
+        <a href="tg://user?id=123">NAME</a>
+    If NAME contains a raw '&' (e.g. "AT&T"), Telegram's Bot API rejects
+    it with:
+        Bad Request: can't parse entities: Unexpected end of name token
+
+    This regex escapes only the bare '&' that are not already an entity,
+    leaving &amp; &lt; &gt; &#123; etc. untouched.
+    """
+    if not text:
+        return text
+    return re.sub(r"&(?!(?:#\d+|#x[\da-fA-F]+|[a-zA-Z]\w*);)", "&amp;", text)
 
 
 def _markup(markup) -> str:
@@ -36,6 +55,15 @@ def _markup(markup) -> str:
     return json.dumps({"inline_keyboard": rows})
 
 
+def _is_not_modified(result: dict) -> bool:
+    """Returns True for the harmless 'message is not modified' error."""
+    return (
+        not result.get("ok")
+        and result.get("error_code") == 400
+        and "message is not modified" in result.get("description", "")
+    )
+
+
 async def send_styled_video(
     chat_id: int,
     video: str,
@@ -48,7 +76,7 @@ async def send_styled_video(
     data = {
         "chat_id": chat_id,
         "video": video,
-        "caption": caption,
+        "caption": _sanitise_html(caption),
         "parse_mode": parse_mode,
     }
 
@@ -78,7 +106,7 @@ async def send_styled(
 
     data = {
         "chat_id": chat_id,
-        "text": text,
+        "text": _sanitise_html(text),
         "parse_mode": parse_mode,
         "disable_web_page_preview": True,
     }
@@ -117,7 +145,8 @@ async def edit_styled(
         async with session.post(f"{BASE}/editMessageReplyMarkup", data=data) as resp:
             result = await resp.json()
 
-            if not result.get("ok"):
+            # Silence the harmless "not modified" noise
+            if not result.get("ok") and not _is_not_modified(result):
                 print(f"[styled_send] editMarkup error: {result}")
 
             return result
@@ -134,7 +163,7 @@ async def edit_caption_styled(
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
-        "caption": caption,
+        "caption": _sanitise_html(caption),
         "parse_mode": parse_mode,
     }
 
@@ -145,7 +174,7 @@ async def edit_caption_styled(
         async with session.post(f"{BASE}/editMessageCaption", data=data) as resp:
             result = await resp.json()
 
-            if not result.get("ok"):
+            if not result.get("ok") and not _is_not_modified(result):
                 print(f"[styled_send] editCaption error: {result}")
 
             return result
@@ -162,7 +191,7 @@ async def edit_text_styled(
     data = {
         "chat_id": chat_id,
         "message_id": message_id,
-        "text": text,
+        "text": _sanitise_html(text),
         "parse_mode": parse_mode,
         "disable_web_page_preview": True,
     }
@@ -174,7 +203,7 @@ async def edit_text_styled(
         async with session.post(f"{BASE}/editMessageText", data=data) as resp:
             result = await resp.json()
 
-            if not result.get("ok"):
+            if not result.get("ok") and not _is_not_modified(result):
                 print(f"[styled_send] editText error: {result}")
 
             return result
