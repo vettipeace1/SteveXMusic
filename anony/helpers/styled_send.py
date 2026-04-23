@@ -68,6 +68,39 @@ async def send_styled_video(
             return result
 
 
+async def send_styled_photo(
+    chat_id: int,
+    photo: str,
+    caption: str,
+    reply_markup=None,
+    parse_mode: str = "html",
+    reply_to_message_id: int = None,
+) -> dict:
+    """Send a photo message with styled (coloured) inline buttons via raw Bot API."""
+
+    data = {
+        "chat_id": chat_id,
+        "photo": photo,
+        "caption": caption,
+        "parse_mode": parse_mode,
+    }
+
+    if reply_markup:
+        data["reply_markup"] = _markup(reply_markup)
+
+    if reply_to_message_id:
+        data["reply_to_message_id"] = reply_to_message_id
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{BASE}/sendPhoto", data=data) as resp:
+            result = await resp.json()
+
+            if not result.get("ok"):
+                print(f"[styled_send] sendPhoto error: {result}")
+
+            return result
+
+
 async def send_styled(
     chat_id: int,
     text: str,
