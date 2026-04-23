@@ -41,6 +41,10 @@ async def _controls(_, query: types.CallbackQuery):
         return await query.answer()
     await query.answer(query.lang["processing"], show_alert=True)
 
+    # ── initialise so every branch has these defined ──────────────────────────
+    status = None
+    reply = ""
+
     if action == "pause":
         if not await db.playing(chat_id):
             return await query.answer(
@@ -53,6 +57,7 @@ async def _controls(_, query: types.CallbackQuery):
                 message_id=query.message.id,
                 reply_markup=buttons.queue_markup(chat_id, query.lang["paused"], False),
             )
+        # "Stream paused" shown in RED via style="danger"
         status = query.lang["paused"]
         reply = query.lang["play_paused"].format(user)
 
@@ -66,6 +71,8 @@ async def _controls(_, query: types.CallbackQuery):
                 message_id=query.message.id,
                 reply_markup=buttons.queue_markup(chat_id, query.lang["playing"], True),
             )
+        # No status banner when resuming — pass None so the green timer shows again
+        status = None
         reply = query.lang["play_resumed"].format(user)
 
     elif action == "skip":
@@ -111,19 +118,21 @@ async def _controls(_, query: types.CallbackQuery):
             await query.message.reply_text(reply, quote=False)
             await query.message.delete()
         else:
+            # Strip old blockquote footer then re-add fresh reply
+            raw = (
+                query.message.caption.html
+                if query.message.photo
+                else query.message.text.html
+            )
             mtext = re.sub(
                 r"\n\n<blockquote>.*?</blockquote>",
                 "",
-                query.message.caption.html if query.message.photo else query.message.text.html,
+                raw,
                 flags=re.DOTALL,
             )
-            keyboard = buttons.controls(
-                chat_id, status=status if action != "resume" else None
-            )
+            keyboard = buttons.controls(chat_id, status=status)
             new_text = f"{mtext}\n\n<blockquote>{reply}</blockquote>"
 
-            # Use caption variant for photo messages, text variant for plain text.
-            # Both go through HTTP Bot API so style= colours are preserved.
             if query.message.photo:
                 await edit_caption_styled(
                     chat_id=chat_id,
@@ -155,7 +164,7 @@ async def _help_back(_, query: types.CallbackQuery):
         chat_id=query.message.chat.id,
         message_id=query.message.id,
         caption=query.lang["help_menu"],
-        reply_markup=buttons.help_markup(query.lang),   # main grid, no back/close
+        reply_markup=buttons.help_markup(query.lang),
     )
     await query.answer()
 
@@ -182,12 +191,12 @@ async def _help_btn(_, query: types.CallbackQuery):
 @lang.language()
 async def _help_submenu(_, query: types.CallbackQuery):
     """Help submenu (admins, auth, blist, etc.) → show text + Back🟢 Close🔴."""
-    section = query.data.split()[1]   # e.g. "admins"
+    section = query.data.split()[1]
     await edit_caption_styled(
         chat_id=query.message.chat.id,
         message_id=query.message.id,
         caption=query.lang[f"help_{section}"],
-        reply_markup=buttons.help_markup(query.lang, True),  # back=True → Back+Close
+        reply_markup=buttons.help_markup(query.lang, True),
     )
     await query.answer()
 
