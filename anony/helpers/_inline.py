@@ -47,11 +47,11 @@ class Inline:
         if not remove:
             keyboard.append(
                 [
-                    _ikb("▷",   style="success", callback_data=f"controls resume {chat_id}"),   # 🟢 Resume
-                    _ikb("II",  style="danger",  callback_data=f"controls pause {chat_id}"),    # 🔴 Pause
-                    _ikb("⥁",   style="primary", callback_data=f"controls replay {chat_id}"),   # 🔵 Replay
-                    _ikb("‣‣I", style="primary", callback_data=f"controls skip {chat_id}"),     # 🔵 Skip
-                    _ikb("▢",   style="danger",  callback_data=f"controls stop {chat_id}"),     # 🔴 Stop
+                    _ikb("▷",   callback_data=f"controls resume {chat_id}"),
+                    _ikb("II",  callback_data=f"controls pause {chat_id}"),
+                    _ikb("⥁",   callback_data=f"controls replay {chat_id}"),
+                    _ikb("‣‣I", callback_data=f"controls skip {chat_id}"),
+                    _ikb("▢",   callback_data=f"controls stop {chat_id}"),
                 ]
             )
         return self.ikm(keyboard)
@@ -102,10 +102,8 @@ class Inline:
         self, chat_id: int, _text: str, playing: bool
     ) -> types.InlineKeyboardMarkup:
         _action = "pause" if playing else "resume"
-        # Playing → 🟢 GREEN  |  Paused → 🔴 RED
-        _style = "success" if playing else "danger"
         return self.ikm(
-            [[_ikb(_text, style=_style, callback_data=f"controls {_action} {chat_id} q")]]
+            [[_ikb(_text, callback_data=f"controls {_action} {chat_id} q")]]
         )
 
     def settings_markup(
