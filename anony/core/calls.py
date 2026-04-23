@@ -3,6 +3,8 @@
 # This file is part of AnonXMusic
 
 
+from html import escape
+
 from ntgcalls import (ConnectionNotFound, TelegramServerError,
                       RTMPStreamingUnsupported, ConnectionError)
 from pyrogram.errors import (ChatSendMediaForbidden, ChatSendPhotosForbidden,
@@ -88,45 +90,47 @@ class TgCall(PyTgCalls):
             if not seek_time:
                 media.time = 1
                 await db.add_call(chat_id)
+
+                # ── Escape special HTML chars in all dynamic fields ──────────
+                safe_url   = str(media.url or "")
+                safe_title = escape(str(media.title    or ""))
+                safe_dur   = escape(str(media.duration or ""))
+                safe_user  = escape(str(media.user     or ""))
+
                 text = _lang["play_media"].format(
-                    media.url,
-                    media.title,
-                    media.duration,
-                    media.user,
+                    safe_url,
+                    safe_title,
+                    safe_dur,
+                    safe_user,
                 )
-                # controls() with no args → shows only the 5 arrow buttons with colours
                 keyboard = buttons.controls(chat_id)
 
-                try:
-                    if _thumb:
-                        # Edit existing message to photo+caption via raw API → colours work
-                        await edit_caption_styled(
-                            chat_id=chat_id,
-                            message_id=message.id,
-                            caption=text,
-                            reply_markup=keyboard,
-                        )
-                    else:
-                        # Edit existing message to plain text via raw API → colours work
-                        await edit_text_styled(
-                            chat_id=chat_id,
-                            message_id=message.id,
-                            text=text,
-                            reply_markup=keyboard,
-                        )
-                except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
-                    # Fallback: send a new message via raw API → colours still work
-                    if _thumb:
-                        result = await send_styled_photo(
-                            chat_id=chat_id,
-                            photo=_thumb,
-                            caption=text,
-                            reply_markup=keyboard,
-                        )
-                        # Store new message id so skip/stop can delete it
-                        if result.get("ok"):
-                            media.message_id = result["result"]["message_id"]
-                    else:
+                if _thumb:
+                    # Telegram does NOT allow editing a text message into a photo.
+                    # Always send a brand-new photo via raw Bot API → colours work.
+                    result = await send_styled_photo(
+                        chat_id=chat_id,
+                        photo=_thumb,
+                        caption=text,
+                        reply_markup=keyboard,
+                    )
+                    if result.get("ok"):
+                        media.message_id = result["result"]["message_id"]
+                    # Clean up the old "Searching..." / "Downloading..." message
+                    try:
+                        await message.delete()
+                    except Exception:
+                        pass
+                else:
+                    # No thumbnail — edit the existing message via raw Bot API
+                    result = await edit_text_styled(
+                        chat_id=chat_id,
+                        message_id=message.id,
+                        text=text,
+                        reply_markup=keyboard,
+                    )
+                    # If edit failed (message already deleted etc.) send a fresh one
+                    if not result.get("ok"):
                         result = await send_styled(
                             chat_id=chat_id,
                             text=text,
@@ -135,6 +139,15 @@ class TgCall(PyTgCalls):
                         if result.get("ok"):
                             media.message_id = result["result"]["message_id"]
 
+        except (ChatSendMediaForbidden, ChatSendPhotosForbidden):
+            # Photo not allowed in this chat — fall back to plain text
+            result = await send_styled(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=keyboard,
+            )
+            if result.get("ok"):
+                media.message_id = result["result"]["message_id"]
         except FileNotFoundError:
             await message.edit_text(_lang["error_no_file"].format(config.SUPPORT_CHAT))
             await self.play_next(chat_id)
