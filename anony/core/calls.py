@@ -55,6 +55,7 @@ class TgCall(PyTgCalls):
         media: Media | Track,
         seek_time: int = 0,
     ) -> None:
+
         client = await db.get_assistant(chat_id)
         _lang = await lang.get_lang(chat_id)
 
@@ -90,73 +91,70 @@ class TgCall(PyTgCalls):
                 config=types.GroupCallConfig(auto_start=False),
             )
 
-            if seek_time:
-                return
+            if not seek_time:
+                media.time = 1
+                await db.add_call(chat_id)
 
-            # ───── INITIAL PLAY SETUP ─────
-            media.time = 1
-            await db.add_call(chat_id)
+                text = _lang["play_media"].format(
+                    media.url,
+                    media.title,
+                    media.duration,
+                    media.user,
+                )
 
-            text = _lang["play_media"].format(
-                media.url,
-                media.title,
-                media.duration,
-                media.user,
-            )
+                keyboard = buttons.controls(chat_id)
+                sent = None
 
-            keyboard = buttons.controls(chat_id)
-
-            sent = None
-
-            # ───── TRY EDIT EXISTING MESSAGE ─────
-            try:
-                if _thumb:
-                    await message.edit_media(
-                        media=InputMediaPhoto(
-                            media=_thumb,
-                            caption=text,
-                        ),
-                        reply_markup=keyboard,
-                    )
-                else:
-                    await message.edit_text(text, reply_markup=keyboard)
-
-                sent = message
-
-            except (ChatSendMediaForbidden, ChatSendPhotosForbidden, MessageIdInvalid):
-                # ───── FALLBACK SEND NEW MESSAGE ─────
                 try:
                     if _thumb:
-                        sent = await app.send_photo(
-                            chat_id=chat_id,
-                            photo=_thumb,
-                            caption=text,
+                        await message.edit_media(
+                            media=InputMediaPhoto(
+                                media=_thumb,
+                                caption=text,
+                            ),
                             reply_markup=keyboard,
                         )
+                        sent = message
                     else:
-                        sent = await app.send_message(
+                        await message.edit_text(text, reply_markup=keyboard)
+                        sent = message
+
+                except (
+                    ChatSendMediaForbidden,
+                    ChatSendPhotosForbidden,
+                    MessageIdInvalid,
+                ):
+                    try:
+                        if _thumb:
+                            sent = await app.send_photo(
+                                chat_id=chat_id,
+                                photo=_thumb,
+                                caption=text,
+                                reply_markup=keyboard,
+                            )
+                        else:
+                            sent = await app.send_message(
+                                chat_id=chat_id,
+                                text=text,
+                                reply_markup=keyboard,
+                            )
+                    except Exception:
+                        return
+
+                # ✅ ALWAYS store message_id correctly
+                if sent:
+                    media.message_id = sent.id
+
+                    # ✅ APPLY STYLE SAFELY (no spam error)
+                    try:
+                        await edit_styled(
                             chat_id=chat_id,
-                            text=text,
+                            message_id=sent.id,
                             reply_markup=keyboard,
                         )
-                except Exception:
-                    return
+                    except Exception:
+                        pass
 
-            # ───── STORE MESSAGE ID SAFELY ─────
-            if sent:
-                media.message_id = sent.id
-
-                # ───── APPLY BUTTON COLORS (IMPORTANT FIX) ─────
-                try:
-                    await edit_styled(
-                        chat_id=chat_id,
-                        message_id=media.message_id,
-                        reply_markup=keyboard,
-                    )
-                except Exception:
-                    pass
-
-        # ───── ERROR HANDLING ─────
         except FileNotFoundError:
             await message.edit_text(
                 _lang["error_no_file"].format(config.SUPPORT_CHAT)
@@ -193,6 +191,8 @@ class TgCall(PyTgCalls):
 
         await self.play_media(chat_id, msg, media)
 
+    # ─────────────────────────────────────────────
+
     async def play_next(self, chat_id: int) -> None:
         if loop := await db.get_loop(chat_id):
             await db.set_loop(chat_id, loop - 1)
@@ -216,14 +216,13 @@ class TgCall(PyTgCalls):
 
         _lang = await lang.get_lang(chat_id)
 
-        msg = await app.send_message(
-            chat_id=chat_id,
-            text=_lang["play_next"],
-        )
+        msg = await app.send_message(chat_id=chat_id, text=_lang["play_next"])
 
         if not media.file_path:
             media.file_path = await yt.download(media.id, video=media.video)
+
             if not media.file_path:
+                await self.play_next(chat_id)
                 return await msg.edit_text(
                     _lang["error_no_file"].format(config.SUPPORT_CHAT)
                 )
@@ -236,6 +235,8 @@ class TgCall(PyTgCalls):
     async def ping(self) -> float:
         pings = [client.ping for client in self.clients]
         return round(sum(pings) / len(pings), 2)
+
+    # ─────────────────────────────────────────────
 
     async def decorators(self, client: PyTgCalls) -> None:
         @client.on_update()
@@ -251,6 +252,8 @@ class TgCall(PyTgCalls):
                     types.ChatUpdate.Status.CLOSED_VOICE_CHAT,
                 ]:
                     await self.stop(update.chat_id)
+
+    # ─────────────────────────────────────────────
 
     async def boot(self) -> None:
         PyTgCallsSession.notice_displayed = True
