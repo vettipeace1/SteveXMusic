@@ -1,7 +1,5 @@
 # Copyright (c) 2025 AnonymousX1025
 # Licensed under the MIT License.
-# This file is part of AnonXMusic
-
 
 from pathlib import Path
 
@@ -10,6 +8,7 @@ from pyrogram import filters, types
 from anony import anon, app, config, db, lang, queue, tg, yt
 from anony.helpers import buttons, utils
 from anony.helpers._play import checkUB
+from anony.helpers.styled_send import edit_text_styled, send_styled
 
 
 def playlist_to_queue(chat_id: int, tracks: list) -> str:
@@ -19,6 +18,7 @@ def playlist_to_queue(chat_id: int, tracks: list) -> str:
         text += f"<b>{pos}.</b> {track.title}\n"
     text = text[:1948] + "</blockquote>"
     return text
+
 
 @app.on_message(
     filters.command(["play", "playforce", "vplay", "vplayforce"])
@@ -41,6 +41,7 @@ async def play_hndlr(
     media = tg.get_media(m.reply_to_message) if m.reply_to_message else None
     tracks = []
 
+    # ───────────── MEDIA INPUT ─────────────
     if media:
         setattr(sent, "lang", m.lang)
         file = await tg.download(m.reply_to_message, sent)
@@ -50,53 +51,79 @@ async def play_hndlr(
 
     elif url:
         if "playlist" in url:
-            await sent.edit_text(m.lang["playlist_fetch"])
+            await edit_text_styled(
+                chat_id=m.chat.id,
+                message_id=sent.id,
+                text=m.lang["playlist_fetch"],
+            )
+
             tracks = await yt.playlist(
                 config.PLAYLIST_LIMIT, mention, url, video
             )
 
             if not tracks:
-                return await sent.edit_text(m.lang["playlist_error"])
+                return await edit_text_styled(
+                    chat_id=m.chat.id,
+                    message_id=sent.id,
+                    text=m.lang["playlist_error"],
+                )
 
             file = tracks[0]
             tracks.remove(file)
             file.message_id = sent.id
+
         else:
             file = await yt.search(url, sent.id, video=video)
 
         if not file:
-            return await sent.edit_text(
-                m.lang["play_not_found"].format(config.SUPPORT_CHAT)
+            return await edit_text_styled(
+                chat_id=m.chat.id,
+                message_id=sent.id,
+                text=m.lang["play_not_found"].format(config.SUPPORT_CHAT),
             )
 
     elif len(m.command) >= 2:
         query = " ".join(m.command[1:])
         file = await yt.search(query, sent.id, video=video)
+
         if not file:
-            return await sent.edit_text(
-                m.lang["play_not_found"].format(config.SUPPORT_CHAT)
+            return await edit_text_styled(
+                chat_id=m.chat.id,
+                message_id=sent.id,
+                text=m.lang["play_not_found"].format(config.SUPPORT_CHAT),
             )
 
     if not file:
-        return await sent.edit_text(m.lang["play_usage"])
+        return await edit_text_styled(
+            chat_id=m.chat.id,
+            message_id=sent.id,
+            text=m.lang["play_usage"],
+        )
 
+    # ───────────── LIMIT CHECK ─────────────
     if file.duration_sec > config.DURATION_LIMIT:
-        return await sent.edit_text(
-            m.lang["play_duration_limit"].format(config.DURATION_LIMIT // 60)
+        return await edit_text_styled(
+            chat_id=m.chat.id,
+            message_id=sent.id,
+            text=m.lang["play_duration_limit"].format(config.DURATION_LIMIT // 60),
         )
 
     if await db.is_logger():
         await utils.play_log(m, sent.link, file.title, file.duration)
 
     file.user = mention
+
+    # ───────────── QUEUE ─────────────
     if force:
         queue.force_add(m.chat.id, file)
     else:
         position = queue.add(m.chat.id, file)
 
         if position != 0 or await db.get_call(m.chat.id):
-            await sent.edit_text(
-                m.lang["play_queued"].format(
+            await edit_text_styled(
+                chat_id=m.chat.id,
+                message_id=sent.id,
+                text=m.lang["play_queued"].format(
                     position,
                     file.url,
                     file.title,
@@ -107,27 +134,34 @@ async def play_hndlr(
                     m.chat.id, file.id, m.lang["play_now"]
                 ),
             )
+
             if tracks:
                 added = playlist_to_queue(m.chat.id, tracks)
-                await app.send_message(
+                await send_styled(
                     chat_id=m.chat.id,
                     text=m.lang["playlist_queued"].format(len(tracks)) + added,
                 )
             return
 
+    # ───────────── DOWNLOAD ─────────────
     if not file.file_path:
         fname = f"downloads/{file.id}.{'mp4' if video else 'webm'}"
         if Path(fname).exists():
             file.file_path = fname
         else:
-            await sent.edit_text(m.lang["play_downloading"])
+            await edit_text_styled(
+                chat_id=m.chat.id,
+                message_id=sent.id,
+                text=m.lang["play_downloading"],
+            )
             file.file_path = await yt.download(file.id, video=video)
 
+    # ───────────── PLAY ─────────────
     await anon.play_media(chat_id=m.chat.id, message=sent, media=file)
-    if not tracks:
-        return
-    added = playlist_to_queue(m.chat.id, tracks)
-    await app.send_message(
-        chat_id=m.chat.id,
-        text=m.lang["playlist_queued"].format(len(tracks)) + added,
-    )
+
+    if tracks:
+        added = playlist_to_queue(m.chat.id, tracks)
+        await send_styled(
+            chat_id=m.chat.id,
+            text=m.lang["playlist_queued"].format(len(tracks)) + added,
+        )
