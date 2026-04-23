@@ -70,31 +70,47 @@ async def update_timer(length=10):
                 timer = "—" * pos + "◉" + "—" * (length - pos - 1)
 
                 if remaining <= 30:
-                    next = queue.get_next(chat_id, check=True)
-                    if next and not next.file_path:
-                        next.file_path = await yt.download(next.id, video=next.video)
+                    next_track = queue.get_next(chat_id, check=True)
+                    if next_track and not next_track.file_path:
+                        next_track.file_path = await yt.download(
+                            next_track.id, video=next_track.video
+                        )
 
                 if remaining < 10:
-                    remove = True
+                    # Song ending — show full progress bar red 🔴
+                    # "◉" at the very end, all dashes filled
+                    ending_bar = "—" * (length - 1) + "◉"
+                    _lang = await lang.get_lang(chat_id)
+                    await edit_styled(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        reply_markup=buttons.controls(
+                            chat_id=chat_id,
+                            status=_lang.get("ending", ending_bar),
+                            remove=True,
+                        ),
+                    )
                 else:
                     if config.THUMB_GEN:
-                        timer = f"{time.strftime('%M:%S', time.gmtime(played))} | {timer} | -{time.strftime('%M:%S', time.gmtime(remaining))}"
+                        timer = (
+                            f"{time.strftime('%M:%S', time.gmtime(played))}"
+                            f" | {timer} | "
+                            f"-{time.strftime('%M:%S', time.gmtime(remaining))}"
+                        )
                     else:
                         timer = None
-                    remove = False
 
-                if not timer and not remove:
-                    continue
+                    if not timer:
+                        continue
 
-                # Use HTTP Bot API via edit_styled so style= colours are preserved.
-                # Previously app.edit_message_reply_markup (kurigram) stripped style=.
-                await edit_styled(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    reply_markup=buttons.controls(
-                        chat_id=chat_id, timer=timer, remove=remove
-                    ),
-                )
+                    await edit_styled(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        reply_markup=buttons.controls(
+                            chat_id=chat_id, timer=timer, remove=False
+                        ),
+                    )
+
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -111,12 +127,13 @@ async def vc_watcher(sleep=15):
             if len(participants) < 2 and media.time > 30:
                 _lang = await lang.get_lang(chat_id)
                 try:
-                    # Use edit_styled so the 🔴 stopped colour is preserved.
                     await edit_styled(
                         chat_id=chat_id,
                         message_id=media.message_id,
                         reply_markup=buttons.controls(
-                            chat_id=chat_id, status=_lang["stopped"], remove=True
+                            chat_id=chat_id,
+                            status=_lang["stopped"],
+                            remove=True,
                         ),
                     )
                     await anon.stop(chat_id)
